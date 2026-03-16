@@ -24,11 +24,18 @@ public final class DimensionColors {
     private static final Vector3f FALLBACK_COLOR = parseHex("#33AAEE");
     private static final Map<ResourceLocation, Vector3f> colorCache = new HashMap<>();
 
-    // Friendly names for vanilla dimensions
+    // Friendly names for vanilla dimensions (exploration targets)
     private static final Map<ResourceLocation, String> VANILLA_NAMES = Map.of(
             ResourceLocation.withDefaultNamespace("overworld"), "Parallel Overworld",
             ResourceLocation.withDefaultNamespace("the_nether"), "Parallel Nether",
             ResourceLocation.withDefaultNamespace("the_end"), "Parallel End"
+    );
+
+    // Friendly names for vanilla dimensions when used as a return/home destination
+    private static final Map<ResourceLocation, String> VANILLA_HOME_NAMES = Map.of(
+            ResourceLocation.withDefaultNamespace("overworld"), "Overworld",
+            ResourceLocation.withDefaultNamespace("the_nether"), "The Nether",
+            ResourceLocation.withDefaultNamespace("the_end"), "The End"
     );
 
     // Chat colors for vanilla dimensions
@@ -93,6 +100,19 @@ public final class DimensionColors {
             friendly = "Parallel " + capitalizePath(baseDimension.getPath());
         }
 
+        return Component.literal("[" + friendly + "]").withStyle(color);
+    }
+
+    /**
+     * Get a formatted display name for a dimension that is the *destination* when returning
+     * through a portal (i.e. the real base dimension, not an exploration copy).
+     */
+    public static Component getHomeDimensionName(ResourceLocation dimension) {
+        String friendly = VANILLA_HOME_NAMES.get(dimension);
+        ChatFormatting color = VANILLA_CHAT_COLORS.getOrDefault(dimension, ChatFormatting.AQUA);
+        if (friendly == null) {
+            friendly = capitalizePath(dimension.getPath());
+        }
         return Component.literal("[" + friendly + "]").withStyle(color);
     }
 

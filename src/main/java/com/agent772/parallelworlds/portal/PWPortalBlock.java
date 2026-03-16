@@ -45,7 +45,10 @@ import org.joml.Vector3f;
 import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The portal block that fills the inside of a PW portal frame.
@@ -56,6 +59,9 @@ public class PWPortalBlock extends Block implements Portal {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     public static final EnumProperty<Direction.Axis> AXIS = BlockStateProperties.HORIZONTAL_AXIS;
+
+    // Rate-limit portal destination preview: show at most once per 60 ticks (3 s) per player
+    private static final Map<UUID, Long> lastPreviewTick = new ConcurrentHashMap<>();
 
     private static final VoxelShape X_SHAPE = Block.box(0.0, 0.0, 6.0, 16.0, 16.0, 10.0);
     private static final VoxelShape Z_SHAPE = Block.box(6.0, 0.0, 0.0, 10.0, 16.0, 16.0);
@@ -81,6 +87,38 @@ public class PWPortalBlock extends Block implements Portal {
     protected void entityInside(BlockState state, Level level, BlockPos pos, Entity entity) {
         if (entity.canUsePortal(false)) {
             entity.setAsInsidePortal(this, pos);
+        }
+        if (!level.isClientSide && entity instanceof ServerPlayer player) {
+            long now = level.getGameTime();
+            Long last = lastPreviewTick.get(player.getUUID());
+            if (last == null || now - last >= 60L) {
+                lastPreviewTick.put(player.getUUID(), now);
+                showPortalDestination(player, (ServerLevel) level, pos, state);
+            }
+        }
+    }
+
+    private static void showPortalDestination(ServerPlayer player, ServerLevel level, BlockPos pos, BlockState state) {
+        Direction.Axis axis = state.hasProperty(AXIS) ? state.getValue(AXIS) : Direction.Axis.X;
+
+        if (DimensionUtils.isExplorationDimension(level.dimension())) {
+            // Returning – show the base dimension the player came from
+            PWSavedData data = PWSavedData.get(level.getServer());
+            ResourceLocation homeDim = data.getPlayerEntryPortalGlobalPos(player.getUUID())
+                    .map(gp -> gp.dimension().location())
+                    .orElseGet(() -> Level.OVERWORLD.location());
+            Component dimName = DimensionColors.getHomeDimensionName(homeDim);
+            player.sendSystemMessage(
+                    Component.translatable("parallelworlds.portal.target", dimName), true);
+        } else {
+            // Entering – show the target exploration dimension
+            BlockPos canonical = findCanonicalPos(level, pos, axis);
+            if (canonical == null) return;
+            ResourceLocation targetDim = PortalTargetManager.getTarget(level, canonical);
+            if (targetDim == null) return;
+            Component dimName = DimensionColors.getDisplayName(targetDim);
+            player.sendSystemMessage(
+                    Component.translatable("parallelworlds.portal.target", dimName), true);
         }
     }
 
