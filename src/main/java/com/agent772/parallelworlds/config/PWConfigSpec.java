@@ -87,6 +87,12 @@ public final class PWConfigSpec {
     public static final ModConfigSpec.BooleanValue BLOCK_TEMPAD_PORTAL_INTO;
     public static final ModConfigSpec.BooleanValue BLOCK_TEMPAD_PORTAL_INSIDE;
 
+    // Death recall
+    public static final ModConfigSpec.BooleanValue DEATH_RECALL_ENABLED;
+    public static final ModConfigSpec.IntValue DEATH_RECALL_CHARGE_TICKS;
+    public static final ModConfigSpec.IntValue DEATH_RECALL_COOLDOWN_SECONDS;
+    public static final ModConfigSpec.IntValue DEATH_RECALL_EXPIRE_SECONDS;
+
     public enum ResetSchedule { DAILY, WEEKLY, MONTHLY }
     public enum WeekDay { MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY }
     public enum RestrictionMode { BLOCK, WARN, ALLOW }
@@ -314,6 +320,28 @@ public final class PWConfigSpec {
                          "Block non-operator players from opening a Tempad portal WHILE INSIDE an exploration dimension.",
                          "Requires Tempad mod to be installed. Has no effect without it.")
                 .define("blockTempadPortalInside", false);
+        DEATH_RECALL_ENABLED = builder
+                .comment("",
+                         "Give players a one-time Death Recall Token on death in exploration dimensions.",
+                         "Using the token teleports the player back to their exact death location,",
+                         "bypassing cooldowns and teleport-block settings.",
+                         "NOTE: the token is consumed even if the target dimension was deleted.")
+                .define("deathRecallEnabled", true);
+        DEATH_RECALL_CHARGE_TICKS = builder
+                .comment("",
+                         "Ticks the player must hold right-click before the Death Recall Token activates.",
+                         "0 = instant use. Default 100 = 5 seconds.")
+                .defineInRange("deathRecallChargeTicks", 100, 0, 600);
+        DEATH_RECALL_COOLDOWN_SECONDS = builder
+                .comment("",
+                         "Cooldown in seconds applied to the Death Recall Token type after use.",
+                         "Prevents using a second token immediately. 0 = no cooldown.")
+                .defineInRange("deathRecallCooldownSeconds", 0, 0, 600);
+        DEATH_RECALL_EXPIRE_SECONDS = builder
+                .comment("",
+                         "Seconds until a Death Recall Token vanishes from the player's inventory.",
+                         "-1 = never expires. Default 300 = 5 minutes.")
+                .defineInRange("deathRecallExpireSeconds", 300, -1, 86400);
         builder.pop();
 
         // ── Dimension Locks ──

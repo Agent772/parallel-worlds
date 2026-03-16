@@ -3,10 +3,13 @@ package com.agent772.parallelworlds.event;
 import com.agent772.parallelworlds.config.PWConfig;
 import com.agent772.parallelworlds.data.PWSavedData;
 import com.agent772.parallelworlds.data.PlayerExplorationStats;
+import com.agent772.parallelworlds.data.ReturnPosition;
 import com.agent772.parallelworlds.dimension.DimensionManager;
 import com.agent772.parallelworlds.dimension.DimensionUtils;
 import com.agent772.parallelworlds.dimension.SeedManager;
 import com.agent772.parallelworlds.generation.async.AsyncChunkHint;
+import com.agent772.parallelworlds.item.DeathRecallItem;
+import com.agent772.parallelworlds.item.DeathRecallTracker;
 import com.agent772.parallelworlds.network.PWNetworking;
 import com.agent772.parallelworlds.teleport.TeleportHandler;
 import com.agent772.parallelworlds.util.InventoryKeeper;
@@ -17,6 +20,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
 import net.neoforged.neoforge.event.entity.EntityTravelToDimensionEvent;
@@ -26,6 +30,9 @@ import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import org.slf4j.Logger;
 
 import java.time.Duration;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
@@ -36,6 +43,9 @@ public final class PWEventHandlers {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     private static Supplier<DimensionManager> dimensionManagerSupplier;
+
+    /** Pending death locations for players who died in an exploration dimension this session. */
+    private static final Map<UUID, ReturnPosition> pendingDeathRecalls = new ConcurrentHashMap<>();
 
     private PWEventHandlers() {}
 
@@ -85,6 +95,9 @@ public final class PWEventHandlers {
         try {
             // Clear invulnerability to prevent god-mode persistence across sessions
             player.setInvulnerable(false);
+
+            // Cancel any pending death recall countdown
+            DeathRecallTracker.cancel(player.getUUID());
 
             // Clean up async chunk hint tracker
             AsyncChunkHint.onPlayerLogout(player.getUUID());
@@ -183,6 +196,16 @@ public final class PWEventHandlers {
                 player.setExperiencePoints(0);
                 player.setExperienceLevels(0);
             }
+
+            // Record death location for the Death Recall Token
+            if (PWConfig.isDeathRecallEnabled()) {
+                pendingDeathRecalls.put(player.getUUID(), new ReturnPosition(
+                        player.blockPosition(),
+                        player.level().dimension().location(),
+                        player.getYRot(),
+                        player.getXRot()
+                ));
+            }
         } catch (Exception e) {
             LOGGER.error("Error handling death for {}", player.getName().getString(), e);
         }
@@ -197,6 +220,28 @@ public final class PWEventHandlers {
             // Restore saved inventory from keepInventoryInExploration
             if (InventoryKeeper.hasSavedInventory(player.getUUID())) {
                 InventoryKeeper.restoreInventory(player);
+            }
+
+            // Give Death Recall Token AFTER inventory restoration so it isn't overwritten
+            ReturnPosition deathInfo = pendingDeathRecalls.remove(player.getUUID());
+            if (deathInfo != null && PWConfig.isDeathRecallEnabled()) {
+                ItemStack token = DeathRecallItem.createFor(
+                        deathInfo.dimension(), deathInfo.pos(), deathInfo.yRot(), deathInfo.xRot());
+                // Prefer an empty hotbar slot; fall back to any slot, then drop at feet
+                boolean placed = false;
+                for (int slot = 8; slot >= 0; slot--) {
+                    if (player.getInventory().getItem(slot).isEmpty()) {
+                        player.getInventory().setItem(slot, token);
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed && !player.getInventory().add(token)) {
+                    player.drop(token, false);
+                }
+                player.displayClientMessage(
+                        Component.translatable("parallelworlds.recall.received")
+                                .withStyle(ChatFormatting.AQUA), false);
             }
 
             // Prevent respawning inside exploration dimensions
@@ -216,12 +261,13 @@ public final class PWEventHandlers {
         }
     }
 
-    // ── Player Tick (Async Chunk Hints) ──
+    // ── Player Tick (Async Chunk Hints + Death Recall) ──
 
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         AsyncChunkHint.onPlayerTick(player);
+        DeathRecallTracker.tick(player);
     }
 
     // ── Block vanilla /tp while inside an exploration dimension ──
@@ -246,6 +292,8 @@ public final class PWEventHandlers {
         if (!PWConfig.isBlockVanillaTeleportInto()) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (player.hasPermissions(2)) return;
+        // Allow Death Recall Token teleports to pass through regardless of config
+        if (TeleportHandler.isRecallInProgress(player.getUUID())) return;
         if (!DimensionUtils.isExplorationDimension(event.getDimension())) return;
         event.setCanceled(true);
         player.displayClientMessage(

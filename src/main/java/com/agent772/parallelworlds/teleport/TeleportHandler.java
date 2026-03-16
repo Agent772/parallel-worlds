@@ -55,6 +55,14 @@ public final class TeleportHandler {
     // ── Time budget for safe-position search (5 ms ≈ 10% of a tick) ──
     private static final long MAX_SEARCH_TIME_NS = TimeUnit.MILLISECONDS.toNanos(5);
 
+    // ── Death-recall bypass: players mid-recall are exempt from travel-to-dim blocking ──
+    private static final java.util.Set<UUID> recallInProgress = ConcurrentHashMap.newKeySet();
+
+    /** Returns true while a Death Recall Token teleport is in progress for this player. */
+    public static boolean isRecallInProgress(UUID playerId) {
+        return recallInProgress.contains(playerId);
+    }
+
     // ── Background cleanup ──
     private static final ScheduledExecutorService CLEANUP_EXECUTOR =
             Executors.newSingleThreadScheduledExecutor(r -> {
@@ -185,6 +193,57 @@ public final class TeleportHandler {
 
         player.displayClientMessage(
                 Component.translatable("parallelworlds.teleport.returned")
+                        .withStyle(ChatFormatting.GREEN), false);
+    }
+
+    /**
+     * Teleport a player to their death location in an exploration dimension via a Death Recall Token.
+     * Bypasses cooldowns, teleport-block config settings, and dimension locks.
+     * Saves the player's current position as a return position so they can come back normally.
+     */
+    public static void teleportToDeathLocation(ServerPlayer player, ServerLevel targetLevel,
+                                               BlockPos deathPos, float yRot, float xRot) {
+        dismountBeforeTeleport(player);
+
+        // Save current overworld position as return so the player can come back via portal/command
+        if (!DimensionUtils.isExplorationDimension(player.level().dimension())) {
+            ReturnPosition ret = new ReturnPosition(
+                    player.blockPosition(),
+                    player.level().dimension().location(),
+                    player.getYRot(),
+                    player.getXRot()
+            );
+            saveReturnPosition(player, ret);
+        }
+
+        // Force-load the death chunk so safe-position search has terrain data
+        ChunkPos cp = new ChunkPos(deathPos);
+        targetLevel.getChunkSource().addRegionTicket(TicketType.PORTAL, cp, 3, deathPos);
+        targetLevel.getChunk(deathPos.getX() >> 4, deathPos.getZ() >> 4, ChunkStatus.FULL);
+
+        BlockPos safePos = ensureSafePosition(targetLevel, deathPos);
+        clearDangerousEffects(player);
+
+        Vec3 target = Vec3.atBottomCenterOf(safePos);
+        DimensionTransition transition = new DimensionTransition(
+                targetLevel, target, Vec3.ZERO,
+                yRot, xRot,
+                DimensionTransition.DO_NOTHING
+        );
+
+        // Mark in-progress so onTravelToDimension bypass check lets this through
+        recallInProgress.add(player.getUUID());
+        try {
+            player.changeDimension(transition);
+        } finally {
+            recallInProgress.remove(player.getUUID());
+        }
+
+        applyPostTeleportSafety(player);
+        // Intentionally no cooldown recorded — the token itself is the usage gate
+
+        player.displayClientMessage(
+                Component.translatable("parallelworlds.recall.used")
                         .withStyle(ChatFormatting.GREEN), false);
     }
 

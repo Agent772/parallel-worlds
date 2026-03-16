@@ -1,5 +1,6 @@
 {
   "block.parallelworlds.pw_portal": "Parallel World Portal",
+  "item.parallelworlds.death_recall_token": "Death Recall Token",
   "parallelworlds.restriction.ender_chest.blocked": "Ender chests are disabled in mining dimensions",
   "parallelworlds.restriction.ender_chest.warning": "Warning: Using ender chests in mining dimensions may bypass intended restrictions",
   "parallelworlds.restriction.item.blocked": "This item is restricted in mining dimensions",
@@ -74,5 +75,18 @@
   "parallelworlds.admin.stats.total_visits": "Total visits (all dims): %s",
   "parallelworlds.admin.stats.pregen_active": "Pre-gen active: %s",
   "parallelworlds.admin.seed.not_found": "No seed found for: %s",
-  "parallelworlds.admin.seed.result": "Seed for %1$s: %2$s"
+  "parallelworlds.admin.seed.result": "Seed for %1$s: %2$s",
+
+  "parallelworlds.recall.received": "You received a Death Recall Token — right-click to return to where you died!",
+  "parallelworlds.recall.used": "Recalling to your death location...",
+  "parallelworlds.recall.invalid": "This Death Recall Token is corrupted.",
+  "parallelworlds.recall.dim_gone": "The dimension you died in no longer exists. Token consumed.",
+  "parallelworlds.recall.expired": "Your Death Recall Token has expired.",
+  "parallelworlds.recall.charging": "Recalling in %ss... Don't move!",
+  "parallelworlds.recall.cancelled_moved": "Recall cancelled — you moved!",
+  "parallelworlds.recall.tooltip.desc": "Right-click to start a recall countdown. Stand still or it cancels!",
+  "parallelworlds.recall.tooltip.single_use": "⚠ One-time use",
+  "parallelworlds.recall.tooltip.target": "Target: %s",
+  "parallelworlds.recall.tooltip.charge": "⚡ Stand still during activation",
+  "parallelworlds.recall.tooltip.expires": "⏳ Expires in: %s"
 }

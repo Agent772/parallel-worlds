@@ -118,11 +118,10 @@ configurations {
 
 dependencies {
     // Jade optional compatibility (compileOnly — not required at runtime)
-    compileOnly files("run/mods/Jade-1.21.1-NeoForge-15.10.1.jar")
+    compileOnly "maven.modrinth:jade:${jade_version}"
 
     // Tempad optional compatibility (compileOnly — not required at runtime)
-    // Jar stored in libs/ so it can be toggled freely in run/mods/ without breaking compilation.
-    compileOnly fileTree(dir: "libs", include: "tempad-*.jar")
+    compileOnly "maven.modrinth:tempad:${tempad_version}"
 
     // Create mod dependencies
     // implementation("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }

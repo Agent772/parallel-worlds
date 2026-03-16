@@ -16,6 +16,7 @@ import com.agent772.parallelworlds.portal.PWPortalBlock;
 import com.agent772.parallelworlds.portal.PortalActivation;
 import com.agent772.parallelworlds.portal.PortalTargetManager;
 import com.agent772.parallelworlds.registry.PWBlocks;
+import com.agent772.parallelworlds.registry.PWItems;
 import com.agent772.parallelworlds.restriction.RestrictionHandler;
 import com.agent772.parallelworlds.teleport.TeleportHandler;
 import com.agent772.parallelworlds.compat.tempad.PWTempadCompat;
@@ -50,6 +51,9 @@ public class ParallelWorlds {
 
         // Register blocks
         PWBlocks.BLOCKS.register(modEventBus);
+
+        // Register items
+        PWItems.ITEMS.register(modEventBus);
 
         // Register server config
         modContainer.registerConfig(ModConfig.Type.SERVER, PWConfigSpec.SPEC);

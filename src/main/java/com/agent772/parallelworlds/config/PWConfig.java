@@ -83,6 +83,12 @@ public final class PWConfig {
     private static boolean blockTempadPortalInto;
     private static boolean blockTempadPortalInside;
 
+    // Death recall
+    private static boolean deathRecallEnabled;
+    private static int deathRecallChargeTicks;
+    private static int deathRecallCooldownSeconds;
+    private static int deathRecallExpireSeconds;
+
     private PWConfig() {}
 
     /**
@@ -152,6 +158,11 @@ public final class PWConfig {
         blockVanillaTeleportInside = PWConfigSpec.BLOCK_VANILLA_TP_INSIDE.get();
         blockTempadPortalInto = PWConfigSpec.BLOCK_TEMPAD_PORTAL_INTO.get();
         blockTempadPortalInside = PWConfigSpec.BLOCK_TEMPAD_PORTAL_INSIDE.get();
+
+        deathRecallEnabled = PWConfigSpec.DEATH_RECALL_ENABLED.get();
+        deathRecallChargeTicks = PWConfigSpec.DEATH_RECALL_CHARGE_TICKS.get();
+        deathRecallCooldownSeconds = PWConfigSpec.DEATH_RECALL_COOLDOWN_SECONDS.get();
+        deathRecallExpireSeconds = PWConfigSpec.DEATH_RECALL_EXPIRE_SECONDS.get();
     }
 
     // ── Getters ──
@@ -236,4 +247,9 @@ public final class PWConfig {
     public static boolean isBlockVanillaTeleportInside() { return blockVanillaTeleportInside; }
     public static boolean isBlockTempadPortalInto() { return blockTempadPortalInto; }
     public static boolean isBlockTempadPortalInside() { return blockTempadPortalInside; }
+
+    public static boolean isDeathRecallEnabled() { return deathRecallEnabled; }
+    public static int getDeathRecallChargeTicks() { return deathRecallChargeTicks; }
+    public static int getDeathRecallCooldownSeconds() { return deathRecallCooldownSeconds; }
+    public static int getDeathRecallExpireSeconds() { return deathRecallExpireSeconds; }
 }
