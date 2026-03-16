@@ -381,10 +381,9 @@ public final class PWAdminCommands {
                 .withStyle(ChatFormatting.GOLD), false);
         DimensionRegistrar registrar = DimensionRegistrar.getInstance();
         for (ResourceKey<Level> key : registrar.getRuntimeDimensions().keySet()) {
+            if (!pregen.hasTask(key)) continue;
             String status = pregen.getStatus(key);
-            if (!status.startsWith("No active")) {
-                source.sendSuccess(() -> Component.literal(status).withStyle(ChatFormatting.AQUA), false);
-            }
+            source.sendSuccess(() -> Component.literal(status).withStyle(ChatFormatting.AQUA), false);
         }
         return 1;
     }

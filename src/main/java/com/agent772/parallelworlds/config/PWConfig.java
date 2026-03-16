@@ -10,7 +10,7 @@ public final class PWConfig {
 
     // General
     private static List<String> enabledDimensions;
-    private static int explorationBorder;
+    private static int explorationBorderDiameter;
 
     // Seed
     private static boolean seedRotationEnabled;
@@ -97,7 +97,7 @@ public final class PWConfig {
     @SuppressWarnings("unchecked")
     public static void refresh() {
         enabledDimensions = (List<String>) PWConfigSpec.ENABLED_DIMENSIONS.get();
-        explorationBorder = PWConfigSpec.EXPLORATION_BORDER.get();
+        explorationBorderDiameter = PWConfigSpec.EXPLORATION_BORDER_DIAMETER.get();
 
         seedRotationEnabled = PWConfigSpec.SEED_ROTATION_ENABLED.get();
         resetSchedule = PWConfigSpec.RESET_SCHEDULE.get();
@@ -168,7 +168,7 @@ public final class PWConfig {
     // ── Getters ──
 
     public static List<String> getEnabledDimensions() { return enabledDimensions; }
-    public static int getExplorationBorder() { return explorationBorder; }
+    public static int getExplorationBorderDiameter() { return explorationBorderDiameter; }
 
     public static boolean isSeedRotationEnabled() { return seedRotationEnabled; }
     public static PWConfigSpec.ResetSchedule getResetSchedule() { return resetSchedule; }

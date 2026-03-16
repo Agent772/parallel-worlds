@@ -143,28 +143,28 @@ public final class PWCommands {
 
         source.sendSuccess(() -> Component.translatable("parallelworlds.command.info.header")
                 .withStyle(ChatFormatting.GOLD), false);
-        source.sendSuccess(() -> Component.literal("Dimension: ")
+        source.sendSuccess(() -> Component.translatable("parallelworlds.command.info.dimension")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal(currentDim.location().toString())
                         .withStyle(ChatFormatting.AQUA)), false);
 
         registrar.getDimensionSeed(currentDim).ifPresent(seed ->
-                source.sendSuccess(() -> Component.literal("Seed: ")
+                source.sendSuccess(() -> Component.translatable("parallelworlds.command.info.seed")
                         .withStyle(ChatFormatting.GRAY)
                         .append(Component.literal(String.valueOf(seed))
                                 .withStyle(ChatFormatting.WHITE)), false));
 
-        source.sendSuccess(() -> Component.literal("Players here: ")
+        source.sendSuccess(() -> Component.translatable("parallelworlds.command.info.players")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal(String.valueOf(level.players().size()))
                         .withStyle(ChatFormatting.GREEN)), false);
 
         savedData.getDimensionMetadata(currentDim.location()).ifPresent(meta -> {
-            source.sendSuccess(() -> Component.literal("Created: ")
+            source.sendSuccess(() -> Component.translatable("parallelworlds.command.info.created")
                     .withStyle(ChatFormatting.GRAY)
                     .append(Component.literal(TIME_FMT.format(Instant.ofEpochMilli(meta.getCreatedTime())))
                             .withStyle(ChatFormatting.WHITE)), false);
-            source.sendSuccess(() -> Component.literal("Total visits: ")
+            source.sendSuccess(() -> Component.translatable("parallelworlds.command.info.visits")
                     .withStyle(ChatFormatting.GRAY)
                     .append(Component.literal(NUM_FMT.format(meta.getTotalVisits()))
                             .withStyle(ChatFormatting.WHITE)), false);

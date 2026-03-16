@@ -3,6 +3,7 @@ package com.agent772.parallelworlds.mixin;
 import com.agent772.parallelworlds.ParallelWorlds;
 import com.agent772.parallelworlds.accessor.IRegistryAccessor;
 import com.agent772.parallelworlds.accessor.IServerDimensionAccessor;
+import com.agent772.parallelworlds.config.PWConfig;
 import com.agent772.parallelworlds.dimension.ExplorationSeedManager;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.Holder;
@@ -100,17 +101,28 @@ public abstract class MixinMinecraftServer implements IServerDimensionAccessor {
             // Safety cleanup on next tick
             server.execute(ExplorationSeedManager::clearCurrentDimension);
 
-            // Border listener
+            // Border listener / fixed border
             try {
-                BorderChangeListener listener =
-                        new BorderChangeListener.DelegateBorderChangeListener(newLevel.getWorldBorder());
+                int borderDiameter = PWConfig.getExplorationBorderDiameter();
                 ServerLevel overworld = server.overworld();
-                if (overworld != null) {
-                    overworld.getWorldBorder().addListener(listener);
-                    pw$borderListeners.add(listener);
+                if (borderDiameter < 0) {
+                    // -1 = inherit overworld border (delegate changes in real time)
+                    if (overworld != null) {
+                        BorderChangeListener listener =
+                                new BorderChangeListener.DelegateBorderChangeListener(newLevel.getWorldBorder());
+                        overworld.getWorldBorder().addListener(listener);
+                        pw$borderListeners.add(listener);
+                    }
+                } else {
+                    // Fixed diameter — matches the unit used by /worldborder; do NOT delegate
+                    // from overworld so main-world border changes don't bleed through.
+                    newLevel.getWorldBorder().setCenter(0, 0);
+                    newLevel.getWorldBorder().setSize(borderDiameter);
+                    pw$LOGGER.info("Set fixed world border on {} — {}x{} blocks ({} block radius)",
+                            dimensionKey.location(), borderDiameter, borderDiameter, borderDiameter / 2);
                 }
             } catch (Exception e) {
-                pw$LOGGER.warn("Failed to setup border listener for {}", dimensionKey.location(), e);
+                pw$LOGGER.warn("Failed to setup border for {}", dimensionKey.location(), e);
             }
 
             levels.put(dimensionKey, newLevel);

@@ -14,7 +14,7 @@ public final class PWConfigSpec {
 
     // General
     public static final ModConfigSpec.ConfigValue<List<? extends String>> ENABLED_DIMENSIONS;
-    public static final ModConfigSpec.IntValue EXPLORATION_BORDER;
+    public static final ModConfigSpec.IntValue EXPLORATION_BORDER_DIAMETER;
 
     // Seed
     public static final ModConfigSpec.BooleanValue SEED_ROTATION_ENABLED;
@@ -111,9 +111,12 @@ public final class PWConfigSpec {
                         List.of("minecraft:overworld"),
                         () -> "minecraft:overworld",
                         o -> o instanceof String s && s.contains(":") && ResourceLocation.tryParse(s) != null);
-        EXPLORATION_BORDER = builder
-                .comment("", "World border radius for exploration dimensions (-1 = inherit from parent world)")
-                .defineInRange("explorationBorder", -1, -1, 1_000_000);
+        EXPLORATION_BORDER_DIAMETER = builder
+                .comment("", "World border DIAMETER for exploration dimensions in blocks (-1 = inherit from overworld).",
+                         "This uses the same unit as the vanilla /worldborder command (the full width, not the radius).",
+                         "Example: 2000 gives a 2000x2000 exploration area (1000 blocks from centre on each side).",
+                         "When set to a positive value the border is fixed at 0,0 and is NOT linked to the overworld border.")
+                .defineInRange("explorationBorderDiameter", -1, -1, 60_000_000);
         builder.pop();
 
         // ── Seed ──
@@ -130,8 +133,9 @@ public final class PWConfigSpec {
                 .comment("", "Day of week for WEEKLY rotation (ignored for DAILY/MONTHLY)")
                 .defineEnum("resetDayOfWeek", WeekDay.MONDAY);
         RESET_DAY_OF_MONTH = builder
-                .comment("", "Day of month for MONTHLY rotation, 1-28 (ignored for DAILY/WEEKLY)")
-                .defineInRange("resetDayOfMonth", 1, 1, 28);
+                .comment("", "Day of month for MONTHLY rotation, 1-31 (ignored for DAILY/WEEKLY).",
+                         "Days beyond the month's length (e.g. 31 in February) roll to the last valid day.")
+                .defineInRange("resetDayOfMonth", 1, 1, 31);
         RESET_HOUR = builder
                 .comment("", "Hour of day (0-23) when the reset becomes eligible. Takes effect on next server restart.")
                 .defineInRange("resetHour", 0, 0, 23);

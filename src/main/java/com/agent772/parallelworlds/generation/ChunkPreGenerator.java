@@ -189,6 +189,10 @@ public class ChunkPreGenerator {
         return !activeTasks.isEmpty();
     }
 
+    public boolean hasTask(ResourceKey<Level> dim) {
+        return activeTasks.containsKey(dim);
+    }
+
     /**
      * Save all task progress and cancel. Called on server shutdown.
      */
