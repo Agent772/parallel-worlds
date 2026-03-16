@@ -80,6 +80,8 @@ public final class PWConfig {
     // Teleport blocking
     private static boolean blockVanillaTeleportInto;
     private static boolean blockVanillaTeleportInside;
+    private static boolean blockTempadPortalInto;
+    private static boolean blockTempadPortalInside;
 
     private PWConfig() {}
 
@@ -148,6 +150,8 @@ public final class PWConfig {
 
         blockVanillaTeleportInto = PWConfigSpec.BLOCK_VANILLA_TP_INTO.get();
         blockVanillaTeleportInside = PWConfigSpec.BLOCK_VANILLA_TP_INSIDE.get();
+        blockTempadPortalInto = PWConfigSpec.BLOCK_TEMPAD_PORTAL_INTO.get();
+        blockTempadPortalInside = PWConfigSpec.BLOCK_TEMPAD_PORTAL_INSIDE.get();
     }
 
     // ── Getters ──
@@ -230,4 +234,6 @@ public final class PWConfig {
 
     public static boolean isBlockVanillaTeleportInto() { return blockVanillaTeleportInto; }
     public static boolean isBlockVanillaTeleportInside() { return blockVanillaTeleportInside; }
+    public static boolean isBlockTempadPortalInto() { return blockTempadPortalInto; }
+    public static boolean isBlockTempadPortalInside() { return blockTempadPortalInside; }
 }

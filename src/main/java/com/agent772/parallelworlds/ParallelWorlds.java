@@ -18,10 +18,12 @@ import com.agent772.parallelworlds.portal.PortalTargetManager;
 import com.agent772.parallelworlds.registry.PWBlocks;
 import com.agent772.parallelworlds.restriction.RestrictionHandler;
 import com.agent772.parallelworlds.teleport.TeleportHandler;
+import com.agent772.parallelworlds.compat.tempad.PWTempadCompat;
 import com.agent772.parallelworlds.util.InventoryKeeper;
 import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
@@ -74,6 +76,12 @@ public class ParallelWorlds {
 
         // Register player lifecycle event handlers
         NeoForge.EVENT_BUS.register(PWEventHandlers.class);
+
+        // Register Tempad portal blocking compat (only when Tempad is loaded)
+        if (ModList.get().isLoaded("tempad")) {
+            NeoForge.EVENT_BUS.register(PWTempadCompat.class);
+            LOGGER.info("Parallel Worlds: Tempad compat enabled");
+        }
     }
 
     private void onConfigLoad(final ModConfigEvent.Loading event) {

@@ -18,8 +18,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.event.CommandEvent;
 import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
+import net.neoforged.neoforge.event.entity.EntityTravelToDimensionEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
@@ -235,6 +235,21 @@ public final class PWEventHandlers {
         event.setCanceled(true);
         player.displayClientMessage(
                 Component.translatable("parallelworlds.teleport.blocked_inside")
+                        .withStyle(ChatFormatting.RED),
+                true);
+    }
+
+    // ── Block cross-dim teleport INTO an exploration dimension ──
+
+    @SubscribeEvent
+    public static void onTravelToDimension(EntityTravelToDimensionEvent event) {
+        if (!PWConfig.isBlockVanillaTeleportInto()) return;
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (player.hasPermissions(2)) return;
+        if (!DimensionUtils.isExplorationDimension(event.getDimension())) return;
+        event.setCanceled(true);
+        player.displayClientMessage(
+                Component.translatable("parallelworlds.teleport.blocked_into")
                         .withStyle(ChatFormatting.RED),
                 true);
     }

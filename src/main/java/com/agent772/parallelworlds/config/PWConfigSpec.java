@@ -84,6 +84,8 @@ public final class PWConfigSpec {
     // Teleport blocking
     public static final ModConfigSpec.BooleanValue BLOCK_VANILLA_TP_INTO;
     public static final ModConfigSpec.BooleanValue BLOCK_VANILLA_TP_INSIDE;
+    public static final ModConfigSpec.BooleanValue BLOCK_TEMPAD_PORTAL_INTO;
+    public static final ModConfigSpec.BooleanValue BLOCK_TEMPAD_PORTAL_INSIDE;
 
     public enum ResetSchedule { DAILY, WEEKLY, MONTHLY }
     public enum WeekDay { MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY }
@@ -302,6 +304,16 @@ public final class PWConfigSpec {
                          "Covers vanilla /tp AND FTB Essentials /home, /back, /warp, /tpa.",
                          "This prevents position-hopping and cross-dim escapes inside the mining world.")
                 .define("blockVanillaTeleportInside", false);
+        BLOCK_TEMPAD_PORTAL_INTO = builder
+                .comment("",
+                         "Block non-operator players from opening a Tempad portal INTO an exploration dimension.",
+                         "Requires Tempad mod to be installed. Has no effect without it.")
+                .define("blockTempadPortalInto", false);
+        BLOCK_TEMPAD_PORTAL_INSIDE = builder
+                .comment("",
+                         "Block non-operator players from opening a Tempad portal WHILE INSIDE an exploration dimension.",
+                         "Requires Tempad mod to be installed. Has no effect without it.")
+                .define("blockTempadPortalInside", false);
         builder.pop();
 
         // ── Dimension Locks ──

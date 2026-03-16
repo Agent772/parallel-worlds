@@ -7,7 +7,6 @@
     "MixinMinecraftServer",
     "MixinMappedRegistry",
     "MixinServerLevel",
-    "MixinServerPlayer",
     "MixinChunkMap",
     "MixinRandomState",
     "MixinNoiseBasedChunkGenerator",
