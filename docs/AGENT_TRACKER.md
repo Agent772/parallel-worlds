@@ -198,3 +198,27 @@ Files created/modified per epic. Agents should check this before starting work.
 
 ### Build Verification
 After completing an epic, run `./gradlew build` and confirm no errors.
+
+---
+
+## Remaining Manual Tests
+
+These require a live server + client and cannot be covered by unit or GameTest automation. Check them off as you verify.
+
+### Epic 14 — Third-Party Mod Data Cleanup
+- [ ] **Xaero's World Map** — regenerate a dimension, reconnect client with Xaero's World Map installed; confirm old dimension tiles are gone from `XaeroWorldMap/<server>/DIM%parallelworlds%<dimpath>/`
+- [ ] **Xaero's Minimap** — same as above for minimap data under `XaeroMinimap/`
+- [ ] **JourneyMap** — confirm `journeymap/data/mp/<server>/<dimpath>/` is cleared on reconnect after rotation
+- [ ] **Distant Horizons (client)** — confirm matching SQLite DB files in `config/DistantHorizons/data/<server>/` are deleted after dimension rotation
+- [ ] **No mods installed** — cleanup packet triggers with none of the above mods present; no errors logged
+- [ ] **Config toggle** — set `modCompatCleanupEnabled = false`; confirm no cleanup occurs and no packet is sent
+
+### Shader Dimension Detection
+- [ ] **Iris/Oculus dimension detection** — confirm shader `isExplorationDimension` uniform (or equivalent) is set correctly when inside a `pw_*` dimension (shaders that check for special dimensions should treat it like overworld/nether/end as appropriate)
+- [ ] **Sky rendering** — confirm nether-type exploration dimension does not show void sky in overworld shaders
+- [ ] **Ambient light** — confirm end-type exploration dimension ambient brightness matches expectations under shaders
+
+### General Regression
+- [ ] Seed rotation triggers correctly on scheduled day/time after restart
+- [ ] Players in exploration dimension at shutdown are evacuated to their saved return position on next login
+- [ ] Portal cycling color changes visible under shaders and without shaders
