@@ -33,6 +33,8 @@ public class PWSavedData extends SavedData {
     // ── Data maps ──
     private final Map<UUID, ReturnPosition> playerReturnPositions = new HashMap<>();
     private final Map<ResourceLocation, Long> dimensionSeeds = new HashMap<>();
+    // baseDim -> exploration dim ResourceLocation (e.g. minecraft:overworld -> parallelworlds:pw_overworld_0)
+    private final Map<ResourceLocation, ResourceLocation> dimensionKeys = new HashMap<>();
     private final Map<ResourceLocation, DimensionMetadata> dimensionMetadata = new HashMap<>();
     private final Map<UUID, PlayerExplorationStats> playerStats = new HashMap<>();
     private final Set<ResourceLocation> activeDimensions = new HashSet<>();
@@ -104,6 +106,22 @@ public class PWSavedData extends SavedData {
 
     public void clearAllSeeds() {
         dimensionSeeds.clear();
+        setDirty();
+    }
+
+    // ── Dimension key mapping (baseDim → exploration key) ──
+
+    public void saveDimensionKey(ResourceLocation baseDim, ResourceLocation explorationKey) {
+        dimensionKeys.put(baseDim, explorationKey);
+        setDirty();
+    }
+
+    public Optional<ResourceLocation> getSavedDimensionKey(ResourceLocation baseDim) {
+        return Optional.ofNullable(dimensionKeys.get(baseDim));
+    }
+
+    public void clearAllDimensionKeys() {
+        dimensionKeys.clear();
         setDirty();
     }
 
@@ -362,6 +380,12 @@ public class PWSavedData extends SavedData {
                 seedsTag.putLong(dim.toString(), seed));
         tag.put("dimensionSeeds", seedsTag);
 
+        // Dimension key mappings (baseDim -> exploration key)
+        CompoundTag keysTag = new CompoundTag();
+        dimensionKeys.forEach((baseDim, explorationKey) ->
+                keysTag.putString(baseDim.toString(), explorationKey.toString()));
+        tag.put("dimensionKeys", keysTag);
+
         // Last reset time
         tag.putLong("lastResetEpochSecond", lastResetEpochSecond);
 
@@ -458,6 +482,20 @@ public class PWSavedData extends SavedData {
             }
         }
 
+        // Dimension key mappings (baseDim -> exploration key)
+        if (tag.contains("dimensionKeys", Tag.TAG_COMPOUND)) {
+            CompoundTag keysTag = tag.getCompound("dimensionKeys");
+            for (String key : keysTag.getAllKeys()) {
+                try {
+                    ResourceLocation baseDim = ResourceLocation.parse(key);
+                    ResourceLocation explorationKey = ResourceLocation.parse(keysTag.getString(key));
+                    data.dimensionKeys.put(baseDim, explorationKey);
+                } catch (Exception e) {
+                    LOGGER.warn("Skipping malformed dimension key entry for key: {}", key);
+                }
+            }
+        }
+
         // Last reset time
         data.lastResetEpochSecond = tag.getLong("lastResetEpochSecond");
 
@@ -540,6 +578,31 @@ public class PWSavedData extends SavedData {
         LOGGER.info("Loaded PWSavedData: {} return positions, {} seeds, {} metadata entries, {} player stats, {} portal targets",
                 data.playerReturnPositions.size(), data.dimensionSeeds.size(),
                 data.dimensionMetadata.size(), data.playerStats.size(), data.portalTargets.size());
+
+        // Exploration portals
+        if (tag.contains("explorationPortals", Tag.TAG_COMPOUND)) {
+            CompoundTag explorationPortalsTag = tag.getCompound("explorationPortals");
+            for (String key : explorationPortalsTag.getAllKeys()) {
+                try {
+                    data.explorationPortals.put(key, explorationPortalsTag.getCompound(key));
+                } catch (Exception e) {
+                    LOGGER.warn("Skipping malformed exploration portal entry for key: {}", key);
+                }
+            }
+        }
+
+        // Player entry portals
+        if (tag.contains("playerEntryPortals", Tag.TAG_COMPOUND)) {
+            CompoundTag entryPortalsTag = tag.getCompound("playerEntryPortals");
+            for (String key : entryPortalsTag.getAllKeys()) {
+                try {
+                    UUID uuid = UUID.fromString(key);
+                    data.playerEntryPortals.put(uuid, entryPortalsTag.getCompound(key));
+                } catch (Exception e) {
+                    LOGGER.warn("Skipping malformed player entry portal for key: {}", key);
+                }
+            }
+        }
 
         // Pending cleanup dimensions
         if (tag.contains("pendingCleanupDimensions", Tag.TAG_LIST)) {

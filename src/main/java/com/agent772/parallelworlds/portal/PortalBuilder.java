@@ -51,14 +51,6 @@ public final class PortalBuilder {
             }
         }
 
-        // Ensure solid ground under the portal
-        for (int w = -1; w <= INTERIOR_WIDTH; w++) {
-            BlockPos groundPos = base.relative(rightDir, w).below();
-            if (!level.getBlockState(groundPos).isSolid()) {
-                level.setBlockAndUpdate(groundPos, frameState);
-            }
-        }
-
         // Bottom frame row (including corners)
         for (int w = -1; w <= INTERIOR_WIDTH; w++) {
             level.setBlockAndUpdate(base.relative(rightDir, w).below(), frameState);
@@ -86,7 +78,7 @@ public final class PortalBuilder {
             }
         }
 
-        // Clear 1 block of air in front and behind the portal for walkability
+        // Clear solid terrain directly in front and behind the portal so the player can exit
         Direction perpendicular = axis == Direction.Axis.X ? Direction.NORTH : Direction.WEST;
         for (int side = 0; side < 2; side++) {
             Direction dir = side == 0 ? perpendicular : perpendicular.getOpposite();
@@ -97,13 +89,6 @@ public final class PortalBuilder {
                     if (!existing.isAir() && existing.isSolid()) {
                         level.setBlockAndUpdate(clearPos, Blocks.AIR.defaultBlockState());
                     }
-                }
-            }
-            // Ensure ground in front/behind
-            for (int w = 0; w < INTERIOR_WIDTH; w++) {
-                BlockPos groundPos = base.relative(rightDir, w).relative(dir).below();
-                if (!level.getBlockState(groundPos).isSolid()) {
-                    level.setBlockAndUpdate(groundPos, frameState);
                 }
             }
         }

@@ -48,32 +48,66 @@ public final class DimensionFactory {
                             "pw_" + baseName + "_" + dimensionId)
             );
 
-            // Register seed and set ThreadLocal context BEFORE chunk generator creation
-            ExplorationSeedManager.registerDimensionSeed(explorationKey, seed);
-            ExplorationSeedManager.setCurrentDimension(explorationKey);
-
-            try {
-                // Clone the generator from the source dimension (preserves all modded worldgen)
-                ChunkGenerator chunkGenerator = cloneChunkGenerator(server, baseDimensionLocation);
-                LOGGER.info("Cloned {} generator from {} for {} with seed {}",
-                        chunkGenerator.getClass().getSimpleName(), baseDimensionLocation,
-                        explorationKey.location(), seed);
-
-                // Delegate to mixin on MinecraftServer
-                ServerLevel level = ((IServerDimensionAccessor) server)
-                        .pw$createRuntimeDimension(explorationKey, dimTypeHolder, chunkGenerator, seed);
-
-                if (level != null) {
-                    LOGGER.info("Successfully created exploration dimension: {} seed: {}",
-                            explorationKey.location(), seed);
-                }
-                return level;
-            } finally {
-                ExplorationSeedManager.clearCurrentDimension();
-            }
+            return registerDimensionWithKey(server, baseDimensionLocation, explorationKey, dimTypeHolder, seed);
         } catch (Exception e) {
             LOGGER.error("Failed to create exploration dimension for {}", baseDimensionLocation, e);
             return null;
+        }
+    }
+
+    /**
+     * Re-register an exploration dimension using an existing key (no counter increment).
+     * Used on server restart in PERSIST mode to reload a dimension whose data is still on disk.
+     *
+     * @return the ServerLevel, or null on failure
+     */
+    public static ServerLevel createExplorationDimensionWithKey(MinecraftServer server,
+                                                                 ResourceLocation baseDimensionLocation,
+                                                                 ResourceLocation existingExplorationKey,
+                                                                 long seed) {
+        try {
+            Holder<DimensionType> dimTypeHolder = resolveSourceDimensionType(server, baseDimensionLocation);
+            ResourceKey<Level> explorationKey = ResourceKey.create(Registries.DIMENSION, existingExplorationKey);
+            return registerDimensionWithKey(server, baseDimensionLocation, explorationKey, dimTypeHolder, seed);
+        } catch (Exception e) {
+            LOGGER.error("Failed to re-register existing exploration dimension {} for {}",
+                    existingExplorationKey, baseDimensionLocation, e);
+            return null;
+        }
+    }
+
+    /** Shared dimension-registration logic used by both creation paths. */
+    private static ServerLevel registerDimensionWithKey(MinecraftServer server,
+                                                         ResourceLocation baseDimensionLocation,
+                                                         ResourceKey<Level> explorationKey,
+                                                         Holder<DimensionType> dimTypeHolder,
+                                                         long seed) {
+        // Register seed and set ThreadLocal context BEFORE chunk generator creation
+        ExplorationSeedManager.registerDimensionSeed(explorationKey, seed);
+        ExplorationSeedManager.setCurrentDimension(explorationKey);
+
+        try {
+            // Clone the generator from the source dimension (preserves all modded worldgen)
+            ChunkGenerator chunkGenerator = cloneChunkGenerator(server, baseDimensionLocation);
+            LOGGER.info("Cloned {} generator from {} for {} with seed {}",
+                    chunkGenerator.getClass().getSimpleName(), baseDimensionLocation,
+                    explorationKey.location(), seed);
+
+            // Delegate to mixin on MinecraftServer
+            ServerLevel level = ((IServerDimensionAccessor) server)
+                    .pw$createRuntimeDimension(explorationKey, dimTypeHolder, chunkGenerator, seed);
+
+            if (level != null) {
+                LOGGER.info("Successfully created exploration dimension: {} seed: {}",
+                        explorationKey.location(), seed);
+            }
+            return level;
+        } catch (Exception e) {
+            LOGGER.error("Failed to register dimension with key {} for {}",
+                    explorationKey.location(), baseDimensionLocation, e);
+            return null;
+        } finally {
+            ExplorationSeedManager.clearCurrentDimension();
         }
     }
 

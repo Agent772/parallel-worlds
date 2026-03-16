@@ -33,6 +33,7 @@ public final class PWConfigSpec {
     public static final ModConfigSpec.BooleanValue PORTAL_ENABLED;
     public static final ModConfigSpec.IntValue PORTAL_DELAY_TICKS;
     public static final ModConfigSpec.IntValue PORTAL_MAX_SIZE;
+    public static final ModConfigSpec.BooleanValue PORTAL_BUILDING_IN_EXPLORATION;
 
     // Restrictions
     public static final ModConfigSpec.EnumValue<RestrictionMode> ENDER_CHEST_MODE;
@@ -158,6 +159,11 @@ public final class PWConfigSpec {
         PORTAL_MAX_SIZE = builder
                 .comment("Maximum inner size of a portal frame (width or height)")
                 .defineInRange("portalMaxSize", 21, 2, 64);
+        PORTAL_BUILDING_IN_EXPLORATION = builder
+                .comment("Allow players to build new portals inside exploration dimensions.",
+                         "If false, players must walk back to the auto-generated entry portal to leave.",
+                         "If true (default), players can build additional portals that also lead home.")
+                .define("portalBuildingInExploration", true);
         builder.pop();
 
         // ── Restrictions ──

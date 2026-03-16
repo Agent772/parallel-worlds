@@ -8,7 +8,6 @@ import com.agent772.parallelworlds.dimension.DimensionUtils;
 import com.agent772.parallelworlds.dimension.SeedManager;
 import com.agent772.parallelworlds.generation.async.AsyncChunkHint;
 import com.agent772.parallelworlds.network.PWNetworking;
-import com.agent772.parallelworlds.portal.PWPortalBlock;
 import com.agent772.parallelworlds.teleport.TeleportHandler;
 import com.agent772.parallelworlds.util.InventoryKeeper;
 import com.mojang.logging.LogUtils;
@@ -119,9 +118,6 @@ public final class PWEventHandlers {
             ResourceLocation to = event.getTo().location();
             boolean leftExploration = DimensionUtils.isExplorationDimension(from);
             boolean enteredExploration = DimensionUtils.isExplorationDimension(to);
-
-            // Reset portal counter when changing dimensions
-            PWPortalBlock.resetPortalCounter(player.getUUID());
 
             PWSavedData savedData = PWSavedData.get(player.server);
             DimensionManager mgr = getDimensionManager();

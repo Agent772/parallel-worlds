@@ -54,6 +54,7 @@ public final class DimensionRegistrar {
         if (rotationDue && PWConfig.isSeedRotationEnabled()) {
             LOGGER.info("Seed rotation is due — generating new seeds for all dimensions");
             savedData.clearAllSeeds();
+            savedData.clearAllDimensionKeys();
             savedData.setLastResetEpochSecond(SeedManager.currentEpochSecond());
         }
 
@@ -75,15 +76,31 @@ public final class DimensionRegistrar {
                     LOGGER.info("Generated new seed {} for {}", seed, baseDim);
                 }
 
-                ServerLevel level = DimensionFactory.createExplorationDimension(server, baseDim, seed);
+                // In persist mode, try to re-register the exact same dimension key so that
+                // existing world data on disk is loaded instead of starting a fresh dimension.
+                Optional<ResourceLocation> savedKey = (isPersistMode && !rotationDue)
+                        ? savedData.getSavedDimensionKey(baseDim)
+                        : Optional.empty();
+
+                ServerLevel level;
+                if (savedKey.isPresent()) {
+                    LOGGER.info("Reusing existing exploration dimension key {} for {}",
+                            savedKey.get(), baseDim);
+                    level = DimensionFactory.createExplorationDimensionWithKey(
+                            server, baseDim, savedKey.get(), seed);
+                } else {
+                    level = DimensionFactory.createExplorationDimension(server, baseDim, seed);
+                }
+
                 if (level != null) {
                     ResourceKey<Level> explorationKey = level.dimension();
                     runtimeDimensions.put(explorationKey, level);
                     dimensionMappings.put(baseDim, explorationKey);
                     dimensionSeeds.put(explorationKey, seed);
 
-                    // Persist seed and metadata
+                    // Persist seed and the exploration key for future restarts
                     savedData.saveSeed(baseDim, seed);
+                    savedData.saveDimensionKey(baseDim, explorationKey.location());
                     DimensionMetadata meta = savedData.getDimensionMetadata(explorationKey.location())
                             .orElse(null);
                     if (meta == null || rotationDue) {

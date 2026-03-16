@@ -35,6 +35,13 @@ public final class PortalActivation {
         if (!PWConfig.isPortalEnabled()) return;
 
         Level level = event.getLevel();
+
+        // Block portal building in exploration dimensions when config disables it
+        if (level instanceof ServerLevel serverLevel
+                && DimensionUtils.isExplorationDimension(serverLevel.dimension())
+                && !PWConfig.isPortalBuildingInExplorationEnabled()) {
+            return;
+        }
         BlockPos clickedPos = event.getPos();
         BlockState clickedState = level.getBlockState(clickedPos);
 

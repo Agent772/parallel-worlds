@@ -195,11 +195,21 @@ public final class TeleportHandler {
         dismountBeforeTeleport(player);
 
         ServerLevel overworld = player.server.overworld();
-        BlockPos spawn = player.getRespawnPosition();
-        if (spawn == null) {
-            spawn = overworld.getSharedSpawnPos();
+        BlockPos safePos;
+
+        // Prefer the player's bed/respawn-anchor position if it's in the overworld
+        BlockPos respawn = player.getRespawnPosition();
+        ResourceKey<Level> respawnDim = player.getRespawnDimension();
+        if (respawn != null && overworld.dimension().equals(respawnDim)) {
+            // Force-load the respawn chunk before searching (same as resolveSpawnPosition)
+            ChunkPos cp = new ChunkPos(respawn);
+            overworld.getChunkSource().addRegionTicket(TicketType.PORTAL, cp, 3, respawn);
+            overworld.getChunk(respawn.getX() >> 4, respawn.getZ() >> 4, ChunkStatus.FULL);
+            safePos = ensureSafePosition(overworld, respawn);
+        } else {
+            // No valid overworld respawn — use resolveSpawnPosition which handles chunk loading
+            safePos = resolveSpawnPosition(overworld);
         }
-        BlockPos safePos = ensureSafePosition(overworld, spawn);
 
         clearDangerousEffects(player);
 
@@ -251,12 +261,12 @@ public final class TeleportHandler {
 
     // ── Persistence helpers ──
 
-    private static void saveReturnPosition(ServerPlayer player, ReturnPosition pos) {
+    public static void saveReturnPosition(ServerPlayer player, ReturnPosition pos) {
         returnPositions.put(player.getUUID(), pos);
         PWSavedData.get(player.server).saveReturnPosition(player.getUUID(), pos);
     }
 
-    private static void removeReturnPosition(ServerPlayer player) {
+    public static void removeReturnPosition(ServerPlayer player) {
         returnPositions.remove(player.getUUID());
         PWSavedData.get(player.server).clearReturnPosition(player.getUUID());
     }
@@ -265,7 +275,7 @@ public final class TeleportHandler {
     //  Post-teleport safety
     // ═══════════════════════════════════════════════════════════════
 
-    private static void applyPostTeleportSafety(ServerPlayer player) {
+    public static void applyPostTeleportSafety(ServerPlayer player) {
         player.setInvulnerable(true);
         player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 100, 1)); // Resistance II
         player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 100, 0));
@@ -280,7 +290,7 @@ public final class TeleportHandler {
         }));
     }
 
-    private static void clearDangerousEffects(ServerPlayer player) {
+    public static void clearDangerousEffects(ServerPlayer player) {
         player.removeEffect(MobEffects.LEVITATION);
         player.removeEffect(MobEffects.BLINDNESS);
     }
@@ -289,7 +299,7 @@ public final class TeleportHandler {
     //  Dismount
     // ═══════════════════════════════════════════════════════════════
 
-    private static void dismountBeforeTeleport(ServerPlayer player) {
+    public static void dismountBeforeTeleport(ServerPlayer player) {
         if (player.getVehicle() != null) {
             player.stopRiding();
             player.displayClientMessage(
@@ -341,7 +351,7 @@ public final class TeleportHandler {
      * Forces a synchronous chunk load on the center chunk, then runs
      * the multi-phase search, falling back to an emergency platform.
      */
-    private static BlockPos resolveSpawnPosition(ServerLevel level) {
+    public static BlockPos resolveSpawnPosition(ServerLevel level) {
         BlockPos center = level.getSharedSpawnPos();
 
         // Force-load the center chunk so terrain is available for the search
