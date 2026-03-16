@@ -1,0 +1,34 @@
+# eclipse
+bin
+*.launch
+.settings
+.metadata
+.classpath
+.project
+
+# idea
+out
+*.ipr
+*.iws
+*.iml
+.idea
+
+# gradle
+build
+.gradle
+
+# other
+eclipse
+run
+runs
+run-data
+
+repo
+create_src
+Issue*
+Issue*/*
+other_src
+other_src/*
+plans
+# Local dev-only jars (copy manually from your mods folder)
+/libs/

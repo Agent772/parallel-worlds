@@ -1,0 +1,20 @@
+{
+  "required": true,
+  "package": "com.agent772.parallelworlds.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "mixins": [
+    "MixinMinecraftServer",
+    "MixinMappedRegistry",
+    "MixinServerLevel",
+    "MixinChunkMap",
+    "MixinRandomState",
+    "MixinNoiseBasedChunkGenerator",
+    "IStructureManagerAccessor"
+  ],
+  "client": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

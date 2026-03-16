@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(jar -tf build/moddev/artifacts/neoforge-21.1.209-client-extra-aka-minecraft-resources.jar)"
+    ]
+  }
+}

@@ -1,0 +1,513 @@
+## Comprehensive Exploration of BrecherDimensions Mod
+
+I've thoroughly explored the BrecherDimensions mod codebase. Here's the complete analysis:
+
+---
+
+## **1. MIXINS (The Hooks)**
+
+### Mixin JSON Configs:
+- **common/brecher_dim.mixins.json** - Empty (no common mixins, platform-specific only)
+- **neoforge/brecher_dim-neoforge.mixins.json** - 10 server mixins + 1 client
+- **fabric/brecher_dim-fabric.mixins.json** - 11 server mixins (includes ServerPlayerMixin) + 1 client
+
+### Key Mixin Classes:
+
+#### **MixinMinecraftServer** (IServerDimensionAccessor)
+- **Purpose**: Runtime dimension creation with registry manipulation
+- **Key methods**: 
+  - `createRuntimeDimension()` - Core entry point for dynamic dimension creation
+  - Registry type discovery (maps exploration dims to vanilla types: overworld/nether/end)
+  - Validates inputs and checks for duplicates
+
+#### **MixinServerLevel**
+- **Purpose**: Runtime dimension lifecycle management
+- **Key hooks**:
+  - `<init>` - Marks dimensions as runtime explorations via ExplorationSeedManager
+  - `saveLevelData()` - Prevents disk persistence if configured
+  - `save()` - Overall save prevention
+  - `tickChunk()` - Optimization hook for aggressive chunk unloading
+
+#### **MixinRegistryFixed** (IRegistryAccessor<T>)
+- **Purpose**: Advanced runtime registry manipulation via reflection
+- **3-stage field discovery** (handles obfuscation):
+  1. Direct class fields
+  2. Superclass hierarchy
+  3. Field name heuristics
+- **Operations**: Temporarily unfreezes registry, registers runtime entries, validates state
+- **Critical**: Throws `RegistryDiscoveryException` on failure (mod disables itself)
+
+#### **MixinServerChunkCache**
+- **Purpose**: Seeds chunk generation correctly
+- Logs exploration dimension creation
+- Retrieves custom seed for structure generation
+
+#### **MixinChunkMap**
+- **Purpose**: Prevents chunk file persistence
+- `save()` → Returns false if exploration dimension
+
+#### **MixinPlayerList**
+- **Purpose**: Client-server sync of new dimensions
+- `placeNewPlayer()` - Syncs all runtime dimensions to joining players
+- Emergency evacuation if player joins while in exploration dimension
+- Handles dimension transitions for packet syncing
+
+#### **Client Mixin: MixinClientPacketListener** (Both platforms)
+- Listens for dimension sync packets on client
+
+#### **Other mixins**:
+- **MixinEndGatewayBlock** - Likely prevents vanilla End gateway teleportation in exploration End
+- **MixinLevelStem**, **MixinRandomState** - Support mixins
+- **Fabric-only ServerPlayerMixin** - Fabric-specific player handling
+
+---
+
+## **2. ACCESSOR PACKAGE** (`common/accessor/`)
+
+**2 Interface files that define safe mixin access:**
+
+### **IRegistryAccessor<T>**
+```
+- setFrozen(boolean) / isFrozen()
+- addMapping(int id, ResourceKey, T value)
+- registerRuntime(ResourceKey, T value)
+- removeRuntimeEntry(ResourceKey)
+- cleanupAllRuntimeEntries()
+- getRuntimeEntries() → Set<ResourceKey>
+- validateRegistryState() → boolean
+- dumpRegistryDiagnostics()
+```
+
+### **IServerDimensionAccessor**
+```
+- createRuntimeDimension(ResourceKey, DimensionType, ChunkGenerator, seed) → ServerLevel
+- removeRuntimeDimension(ResourceKey)
+- getRuntimeLevels() → Map<ResourceKey, ServerLevel>
+- cleanupAllRuntimeDimensions()
+```
+
+---
+
+## **3. TELEPORTHANDLER** (`common/teleport/TeleportHandler.java`)
+
+**Enormous class** (1000+ lines) - Core teleportation logic:
+
+### **Main Entry Points**:
+- `teleportToExploration(ServerPlayer, ServerLevel)` - Enter exploration dimension
+- `returnFromExploration(ServerPlayer)` - Exit exploration dimension
+- `teleportToWorldSpawn(ServerPlayer)` - Emergency fallback
+
+### **Position Finding** (Multi-strategy):
+- `findSafePosition()` - Main search with phases:
+  - Phase 1: 8-block radius
+  - Phase 2: 16-block radius
+  - Phase 3: 32-block radius (if Nether or extended config)
+  - Phase 4: 48-block radius (Nether only)
+  - Time budget: max 5ms per tick (prevents lag)
+  
+- `findSurfacePosition()` - Finds surface-level spawns
+- `findNetherSafePosition()` - Specialized for ultraWarm dimensions
+- `findEndSafePosition()` - Specialized for void dimensions
+- `searchInRadius()` - Spiral search pattern with angle stepping (45°, 30°, or 20° depending on radius)
+- `findSafeInColumn()` - Vertical search ±32 blocks from center
+- `findHighestSolidBlock()` - Finds terrain surface (excludes leaves, dangerous blocks)
+- `findDirectSurfacePosition()` - Direct upward search if underground
+
+### **Safety Features**:
+- `dismountBeforeTeleport()` - Removes player from vehicles/boats to prevent glitches
+- **Teleport cooldown** - Enforced (ops bypass), configurable seconds
+- **Invulnerability window** - 100 ticks post-teleport + DAMAGE_RESISTANCE + SLOW_FALLING
+- **Clears dangerous effects** - Removes LEVITATION, BLINDNESS
+- **Event pairing** - `preTeleport()` → actual teleport → `postTeleport()` 
+  - Prevents mismatched callbacks if teleport fails
+- **Emergency platform** - If all searches fail, creates one
+- **Return position preservation** - Saves position on first exploration entry (not on exploration→exploration moves)
+- **Seed lock info display** - Shows time until seed resets
+
+### **Cleanup Executor**:
+- Background thread - Cleans up old teleport time data every 5 minutes
+- Retention: 30 minutes of teleport records max (1000 record limit)
+
+---
+
+## **4. CHUNK MANAGEMENT**
+
+### **ChunkManager** (`performance/ChunkManager.java`)
+```
+- configureForExploration(ServerLevel)
+- forceUnloadAllChunks(ServerLevel) - Conditional on aggressive mode or memory pressure
+- performCleanup(MinecraftServer)
+Tracks: loadedChunks, chunkLoadCounts, chunkUnloadCounts per dimension
+```
+
+### **MemoryMonitor** (`performance/MemoryMonitor.java`)
+```
+- logMemoryUsage(context) - Logs in MB
+- isMemoryPressureHigh() - true if >80% of max heap
+- getMemoryUsagePercent() - Uses maxMemory as denominator (not totalMemory) for consistent readings
+```
+
+---
+
+## **5. COMPAT PACKAGE** (`common/compat/`)
+
+### **CorpseModCompat**
+- Detects corpse/gravestone mods (corpse, gravestones, yigd, tombstone, vanilladeathchest, bodycorpse, coil)
+- `isCorpseModPresent()` - Lazy-loaded cache
+- `shouldHandleInventory()` - Returns false if corpse mod present + deferred + corpse mod enabled
+- `addCorpseModId()` - Dynamic mod registration
+
+### **EventPriorityHelper**
+- `getDeathEventPriority()` → HIGH or LOW
+  - Returns LOW if corpse mod present + deferred (lets corpse mod run first)
+  - Returns HIGH otherwise (save inventory before item drops)
+
+---
+
+## **6. DEBUG PACKAGE** (`common/debug/`)
+
+### **RegistryFieldDiagnostics**
+- **Placeholder class** - For future expansion
+- Methods stubbed: `analyzeMappedRegistryFields()`, `testCurrentShadowFields()`, `identifyFieldMappingIssues()`
+
+---
+
+## **7. EXCEPTION PACKAGE** (`common/exception/`)
+
+### **RegistryDiscoveryException**
+- `extends RuntimeException`
+- Thrown when registry field reflection fails
+- Indicates critical failure requiring mod disable
+- Contains both message and cause
+
+---
+
+## **8. NETWORK/PACKET PACKAGE**
+
+### **BrecherNetworking** (`network/BrecherNetworking.java`)
+Cross-platform networking wrapper using Services pattern.
+
+**Public API**:
+```
+- init() - Register packets
+- sendDimensionSync(player, dimensionId, exists)
+- sendDimensionSyncToAll(dimensionId, exists)
+- sendDimensionReset(player, dimensionId, resetTime)
+- sendResetWarning(player, minutesRemaining, message)
+- sendRegistrySync(player, dimensionId, nbtData)
+- sendEnhancedRegistrySync(player, nbtData)
+- sendChunkedRegistrySync(player, chunkIndex, totalChunks, nbtData)
+```
+
+### **Payload Classes** (`network/payload/`):
+
+1. **DimensionSyncPayload** - `(dimensionId: ResourceLocation, exists: boolean)`
+2. **DimensionResetPayload** - `(dimensionId: ResourceLocation, resetTime: long)`
+3. **ResetWarningPayload** - `(minutesRemaining: int, message: String)`
+4. **RegistrySyncPayload** - `(dimensionId: ResourceLocation, nbtData: byte[])`
+5. **EnhancedRegistrySyncPayload** - `(nbtData: byte[])`
+6. **ChunkedRegistrySyncPayload** - `(chunkIndex: int, totalChunks: int, nbtData: byte[])`
+
+All use StreamCodec for serialization.
+
+---
+
+## **9. DATA PERSISTENCE** (`common/data/`)
+
+### **BrecherSavedData** (extends SavedData, name: "brecher_dimensions")
+
+**Stored Data**:
+- `activeDimensions` - Set<ResourceLocation>
+- `dimensionResetTimes` - Map<ResourceLocation, Long>
+- `playerLastPositions` - Map<UUID, ResourceLocation>
+- `dimensionAccessHistory` - Map<ResourceLocation, Set<UUID>>
+- `playerReturnPositions` - Map<UUID, ReturnPosition>
+- `dimensionMetadata` - Map<ResourceLocation, DimensionMetadata>
+- `playerStats` - Map<UUID, PlayerExplorationStats>
+- `playerLastKnownDimensions` - Map<UUID, ResourceLocation>
+- `pregenTasks` - Map<ResourceLocation, GenerationProgress>
+- `nextResetTime` - long
+
+### **ReturnPosition** (record)
+```java
+ReturnPosition(BlockPos pos, ResourceLocation dimension, float yRot, float xRot, long timestamp)
+- isExpired() → 7-day TTL
+- getTimeSinceCreation() → long milliseconds
+- toNBT() / fromNBT()
+```
+
+### **DimensionMetadata** (record)
+```
+- dimension: ResourceLocation
+- createdTime, lastAccessTime: long
+- accessedBy: Set<UUID>
+- totalVisits: int
+- recordAccess(UUID)
+- reset()
+```
+
+### **PlayerExplorationStats**
+```
+- playerId: UUID
+- dimensionVisits: Map<ResourceLocation, Integer>
+- loadedChunks: Set<ChunkPos>
+- totalExplorationTime: long
+- Methods: recordVisit(), recordChunkLoad/Unload(), endVisit(), getters
+```
+
+---
+
+## **10. DIMENSION MANAGEMENT** (`common/dimension/`)
+
+### **BrecherDimensionManager**
+**Runtime tracking during server operation**:
+```
+- dimensionMappings: Map<ResourceKey<Level>, ResourceKey<Level>>
+- activeDimensions: Set<ResourceLocation>
+- playerLastDimension: Map<UUID, ResourceLocation>
+
+Key methods:
+- getExplorationDimension(baseDim) → Optional<ServerLevel>
+- isExplorationDimension(ResourceLocation)
+- getExplorationDimensions() → Set<ResourceLocation>
+- onPlayerEnterExploration(player, dimension)
+- onPlayerLeaveExploration(player)
+- getPlayersInExplorationDimensions() → List<ServerPlayer>
+- evacuateAllPlayers() - For shutdown
+- sendMessageToExplorationPlayers(String)
+```
+
+### **DimensionRegistrar** (Singleton)
+**Manages dimension creation at server startup**:
+```
+- runtimeDimensions: Map<ResourceKey<Level>, ServerLevel>
+- dimensionMappings: Map<ResourceLocation, ResourceKey<Level>>
+- dimensionSeeds: Map<ResourceKey<Level>, Long>
+
+Key methods:
+- getInstance() - Static accessor
+- createDimensionsOnServerStart(MinecraftServer)
+- getRuntimeDimensions()
+- getDimensionSeed(dimensionKey) → Optional<Long>
+- isRegistered(baseDimension) → boolean
+```
+
+**Workflow in createDimensionsOnServerStart()**:
+1. Iterate enabled dimensions from config
+2. Generate seed via SimpleSeedManager
+3. Call DynamicDimensionFactory.createExplorationDimension()
+4. Track in maps
+5. Resume saved pre-generation tasks
+6. Auto-start generation if configured
+
+### **ExplorationDimensionInfo** (record)
+```
+- baseDimension: String
+- createdTime, lastResetTime: long
+- playerCount: int
+```
+
+### **DynamicDimensionFactory**
+**Core factory for creating exploration dimensions**:
+```
+- createExplorationDimension(server, baseDimLocation, seed) → ServerLevel
+  1. Check Runtime dimension support via Services
+  2. Register seed in ExplorationSeedManager BEFORE chunk generator creation
+  3. Create appropriate ChunkGenerator (maps base name to vanilla type)
+  4. Generate unique dimension key via DimensionCounterUtil (exploration_base_id format)
+  5. Create LevelStem with direct holder
+  6. Call Services.DIMENSIONS.createDimension()
+  7. Clear dimension context after creation
+  
+- createChunkGeneratorForDimension() - Chooses Nether, End, or Overworld generator
+```
+
+### **SimpleSeedManager**
+- Generates seeds (daily-based or random per config)
+- ExplorationSeedManager manages dimension→seed mappings
+
+---
+
+## **11. UTILITIES** (`common/util/`)
+
+### **DimensionEnvironment** (Enum)
+```
+- OVERWORLD_LIKE (day/night cycle)
+- NETHER_LIKE (ultraWarm=true)
+- END_LIKE (fixedTime=true, !hasCeiling)
+
+Classification via dimension type properties (not name-based) for modded dimension compatibility.
+```
+
+### **DimensionCounterUtil**
+```
+- Maintains per-dimension-type counters in world data folder
+- Counters stored in: data/brecher_dimension_counters.dat
+- File format: dimensionType=count (one per line)
+- getNextDimensionId(baseDimension) → long (increments)
+- getCurrentCounter(baseDimension) → long (no increment)
+- resetCounters() / resetCounter(baseDimension)
+- getAllCounters() → Map<String, Long>
+```
+
+### **DimensionCleanupUtil**
+```
+- cleanupOldDimensions(server)
+  1. Scans dimensions/mod_id folder
+  2. Groups by dimension type
+  3. Sorts by modification time (newest first)
+  4. Deletes old ones, keeps N per type (config: oldDimensionRetentionCount)
+  5. Cleans level.dat references
+  
+- findExplorationDimensions(path) → List<DimensionFolder>
+- isExplorationDimension(folderName) → boolean (pattern match)
+```
+
+### **DimensionHelper**
+```
+- getParentDimension(explorationKey) → Optional<ResourceKey<Level>>
+  Parses: exploration_overworld_0 → minecraft:overworld
+  
+- getDimensionSeed(dimensionKey, isLocating) → Optional<Long>
+  If locating: use parent dim seed (structures appear same location)
+  If generating: use exploration dim seed
+```
+
+### **DimensionUtils**
+- (Contents not fully read, likely other helper methods)
+
+### **InventoryKeeper**
+- Saves/restores player inventory before dimension reset
+
+### **PlayerSnapshot**
+- Records player state
+
+### **AdvancementLockChecker**
+- Prevents advancement cheesing through dimension resets
+
+---
+
+## **12. EVENT HANDLERS** (`common/event/`)
+
+### **BrecherEventHandlers**
+```
+- onPlayerJoin(ServerPlayer)
+  → Sync dimension info if in exploration dimension
+  
+- onPlayerLeave(ServerPlayer)
+  → Clear invulnerability (prevents god-mode persistence)
+  → Record location
+  → End exploration stats
+  
+- onPlayerChangeDimension(ServerPlayer, Level from, Level to)
+  → Track dimension transitions
+  
+- onPlayerDeath(ServerPlayer) [and more]
+  → Handle inventory preservation in exploration dimensions
+  → Sync death events to saved data
+```
+
+---
+
+## **13. GENERATION** (`common/generation/`)
+
+### **GenerationTask**
+**Per-dimension chunk pre-generation on main thread**:
+```
+- dimensionKey, progress tracking
+- Ticket removal scheduling (prevents ticket leak "death spiral")
+
+processNextBatch(level):
+1. Process ticket removals FIRST (even when throttled)
+2. Check completion status
+3. Evaluate TPS throttling:
+   - FULL_SPEED (≥19.5 TPS): full chunksPerTick
+   - REDUCED_SPEED (≥19.0): chunksPerTick - 1
+   - MINIMUM_SPEED (≥18.0): 1 chunk/tick
+   - <18.0 TPS: pause entirely
+4. Built-in time budget (5ms loop limit)
+5. Retry mechanism (3 attempts) for failed chunks
+
+Strategy:
+- Loads to EMPTY status first to check pre-existingly generated
+- Spiral iteration pattern
+- Skips unloaded chunks (no sync loading)
+```
+
+### **GenerationProgress**
+- Tracks: status, chunks generated, chunks skipped, radius, center position
+- Persisted for resuming across restarts
+
+### **ChunkPreGenerator**
+- `startGeneration()`
+- `resumeSavedTasks()`
+- `hasActiveTask()` / `pauseAll()` / `cancelTask()`
+
+### Supporting: **GenerationTask**, **SpiralIterator**, **EndGatewayGenerator**
+
+---
+
+## **INTERACTION MAP**
+
+```
+Server Startup:
+  ├─ DimensionRegistrar.createDimensionsOnServerStart()
+  │  ├─ For each enabled dimension:
+  │  │  ├─ SimpleSeedManager.generateDailySeed()
+  │  │  ├─ DynamicDimensionFactory.createExplorationDimension()
+  │  │  │  ├─ ExplorationSeedManager.registerDimensionSeed()
+  │  │  │  ├─ Create ChunkGenerator (Nether/End/Overworld)
+  │  │  │  └─ Services.DIMENSIONS.createDimension() [platform-specific]
+  │  │  │     └─ MixinMinecraftServer.createRuntimeDimension()
+  │  │  │        └─ MixinRegistryFixed handles registry manipulation
+  │  │  └─ BrecherDimensionManager tracking
+  │  └─ ChunkPreGenerator.resumeSavedTasks()
+  
+Player Teleport:
+  └─ TeleportHandler.teleportToExploration()
+     ├─ check cooldown
+     ├─ dismountBeforeTeleport()
+     ├─ BrecherSavedData.saveReturnPosition()
+     ├─ findSafePosition() [strategy searching, time budgeted]
+     ├─ Services.TELEPORT.preTeleport()
+     ├─ Services.TELEPORT.teleportPlayer()
+     ├─ Add safety effects
+     ├─ Services.TELEPORT.postTeleport()
+     └─ BrecherNetworking.sendDimensionSync() [platform-specific]
+
+Player Return:
+  └─ TeleportHandler.returnFromExploration()
+     ├─ Optional inventory clear
+     ├─ findSafePosition() [with surface preference]
+     ├─ Services.TELEPORT.preTeleport/teleportPlayer/postTeleport
+     └─ Clear return position / dimension tracking
+
+Player Join:
+  └─ MixinPlayerList.placeNewPlayer()
+     ├─ Check emergency evacuation (if joined in exploration dim)
+     └─ Sync runtime dimensions to player
+
+Chunk Generation:
+  ├─ GenerationTask.processNextBatch() [main thread, 5ms budget]
+  ├─ TPS monitoring (throttles if <18 TPS)
+  ├─ Memory monitoring (pauses if >85% used)
+  ├─ MemoryMonitor.isMemoryPressureHigh()
+  └─ Persistence via GenerationProgress
+```
+
+---
+
+**Total Files Analyzed: 45+**  
+- Accessors: 2  
+- Teleport: 1  
+- Mixins: 13 (NeoForge) + 13 (Fabric)  
+- Data: 5  
+- Dimension: 5  
+- Network: 7  
+- Utilities: 8  
+- Events: 1  
+- Generation: 4  
+- Performance: 2  
+- Compat: 2  
+- Debug: 1  
+- Exception: 1

@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "axis=x": {
+      "model": "parallelworlds:block/pw_portal_ns"
+    },
+    "axis=z": {
+      "model": "parallelworlds:block/pw_portal_ew"
+    }
+  }
+}

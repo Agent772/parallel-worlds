@@ -1,0 +1,249 @@
+package com.agent772.parallelworlds.event;
+
+import com.agent772.parallelworlds.config.PWConfig;
+import com.agent772.parallelworlds.data.PWSavedData;
+import com.agent772.parallelworlds.data.PlayerExplorationStats;
+import com.agent772.parallelworlds.dimension.DimensionManager;
+import com.agent772.parallelworlds.dimension.DimensionUtils;
+import com.agent772.parallelworlds.dimension.SeedManager;
+import com.agent772.parallelworlds.generation.async.AsyncChunkHint;
+import com.agent772.parallelworlds.network.PWNetworking;
+import com.agent772.parallelworlds.portal.PWPortalBlock;
+import com.agent772.parallelworlds.teleport.TeleportHandler;
+import com.agent772.parallelworlds.util.InventoryKeeper;
+import com.mojang.logging.LogUtils;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import org.slf4j.Logger;
+
+import java.time.Duration;
+import java.util.function.Supplier;
+
+/**
+ * Handles player lifecycle events in exploration dimensions:
+ * join, leave, dimension change, death, and respawn.
+ */
+public final class PWEventHandlers {
+    private static final Logger LOGGER = LogUtils.getLogger();
+
+    private static Supplier<DimensionManager> dimensionManagerSupplier;
+
+    private PWEventHandlers() {}
+
+    public static void setDimensionManagerSupplier(Supplier<DimensionManager> supplier) {
+        dimensionManagerSupplier = supplier;
+    }
+
+    // ── Player Join ──
+
+    @SubscribeEvent
+    public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        try {
+            // If the player is in a dimension that no longer exists, evacuate to spawn
+            if (DimensionUtils.isExplorationDimension(player.level().dimension())) {
+                var server = player.server;
+                var level = server.getLevel(player.level().dimension());
+                if (level == null) {
+                    LOGGER.warn("Player {} was in deleted exploration dimension — evacuating",
+                            player.getName().getString());
+                    TeleportHandler.forceReturnToSpawn(player);
+                }
+            }
+
+            // Sync all active exploration dimensions to the joining player
+            PWNetworking.syncAllDimensionsToPlayer(player);
+
+            // Send pending mod data cleanup notifications
+            if (PWConfig.isModCompatCleanupEnabled()) {
+                PWSavedData data = PWSavedData.get(player.server);
+                java.util.Set<String> pending = data.getPendingCleanups();
+                if (!pending.isEmpty() && !data.isPlayerNotified(player.getUUID())) {
+                    PWNetworking.sendDimensionCleanup(player, new java.util.ArrayList<>(pending));
+                    data.markPlayerNotified(player.getUUID());
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error handling player login for {}", event.getEntity().getName().getString(), e);
+        }
+    }
+
+    // ── Player Leave ──
+
+    @SubscribeEvent
+    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        try {
+            // Clear invulnerability to prevent god-mode persistence across sessions
+            player.setInvulnerable(false);
+
+            // Clean up async chunk hint tracker
+            AsyncChunkHint.onPlayerLogout(player.getUUID());
+
+            ResourceLocation dimLoc = player.level().dimension().location();
+
+            // Record last known dimension
+            if (DimensionUtils.isExplorationDimension(dimLoc)) {
+                // End exploration stats timer
+                PWSavedData savedData = PWSavedData.get(player.server);
+                PlayerExplorationStats stats = savedData.getOrCreatePlayerStats(player.getUUID());
+                stats.endVisit();
+                savedData.setDirty();
+            }
+
+            // Notify DimensionManager
+            DimensionManager mgr = getDimensionManager();
+            if (mgr != null) {
+                mgr.onPlayerLeave(player);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error handling player logout for {}", event.getEntity().getName().getString(), e);
+        }
+    }
+
+    // ── Dimension Change ──
+
+    @SubscribeEvent
+    public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        try {
+            ResourceLocation from = event.getFrom().location();
+            ResourceLocation to = event.getTo().location();
+            boolean leftExploration = DimensionUtils.isExplorationDimension(from);
+            boolean enteredExploration = DimensionUtils.isExplorationDimension(to);
+
+            // Reset portal counter when changing dimensions
+            PWPortalBlock.resetPortalCounter(player.getUUID());
+
+            PWSavedData savedData = PWSavedData.get(player.server);
+            DimensionManager mgr = getDimensionManager();
+
+            // Leaving exploration dimension
+            if (leftExploration) {
+                PlayerExplorationStats stats = savedData.getOrCreatePlayerStats(player.getUUID());
+                stats.endVisit();
+                savedData.setDirty();
+
+                if (mgr != null) {
+                    mgr.onPlayerLeave(player);
+                }
+
+                if (!enteredExploration) {
+                    player.displayClientMessage(
+                            Component.translatable("parallelworlds.event.returned_from_exploration")
+                                    .withStyle(ChatFormatting.GREEN), false);
+                }
+            }
+
+            // Entering exploration dimension
+            if (enteredExploration) {
+                PlayerExplorationStats stats = savedData.getOrCreatePlayerStats(player.getUUID());
+                stats.recordVisit(to);
+                stats.startVisit();
+                savedData.setDirty();
+
+                if (mgr != null) {
+                    mgr.onPlayerEnter(player, to);
+                }
+
+                // Show seed rotation info if enabled
+                Duration timeUntilReset = SeedManager.getTimeUntilNextReset();
+                if (timeUntilReset != null) {
+                    String timeStr = formatDuration(timeUntilReset);
+                    player.displayClientMessage(
+                            Component.translatable("parallelworlds.command.seed_resets_in", timeStr)
+                                    .withStyle(ChatFormatting.AQUA), false);
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error handling dimension change for {}", event.getEntity().getName().getString(), e);
+        }
+    }
+
+    // ── Player Death ──
+
+    @SubscribeEvent
+    public static void onLivingDeath(LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!DimensionUtils.isExplorationDimension(player.level().dimension())) return;
+
+        try {
+            if (PWConfig.isKeepInventoryInExploration()) {
+                // Save inventory so it can be restored on respawn
+                InventoryKeeper.saveInventory(player);
+
+                // Clear inventory and XP to prevent double-drops
+                player.getInventory().clearContent();
+                player.setExperiencePoints(0);
+                player.setExperienceLevels(0);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error handling death for {}", player.getName().getString(), e);
+        }
+    }
+
+    // ── Player Respawn ──
+
+    @SubscribeEvent
+    public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        try {
+            // Restore saved inventory from keepInventoryInExploration
+            if (InventoryKeeper.hasSavedInventory(player.getUUID())) {
+                InventoryKeeper.restoreInventory(player);
+            }
+
+            // Prevent respawning inside exploration dimensions
+            if (PWConfig.isPreventExplorationSpawn()
+                    && DimensionUtils.isExplorationDimension(player.level().dimension())) {
+                ServerLevel overworld = player.server.overworld();
+                BlockPos spawn = overworld.getSharedSpawnPos();
+                player.teleportTo(overworld,
+                        spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
+                        player.getYRot(), player.getXRot());
+                player.displayClientMessage(
+                        Component.translatable("parallelworlds.event.respawned_overworld")
+                                .withStyle(ChatFormatting.YELLOW), false);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error handling respawn for {}", player.getName().getString(), e);
+        }
+    }
+
+    // ── Player Tick (Async Chunk Hints) ──
+
+    @SubscribeEvent
+    public static void onPlayerTick(PlayerTickEvent.Post event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        AsyncChunkHint.onPlayerTick(player);
+    }
+
+    // ── Helpers ──
+
+    private static DimensionManager getDimensionManager() {
+        return dimensionManagerSupplier != null ? dimensionManagerSupplier.get() : null;
+    }
+
+    private static String formatDuration(Duration d) {
+        long totalSeconds = d.getSeconds();
+        long days = totalSeconds / 86400;
+        long hours = (totalSeconds % 86400) / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+
+        if (days > 0) {
+            return days + "d " + hours + "h";
+        } else if (hours > 0) {
+            return hours + "h " + minutes + "m";
+        } else {
+            return Math.max(minutes, 1) + "m";
+        }
+    }
+}
