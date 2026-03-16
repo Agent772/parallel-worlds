@@ -42,6 +42,8 @@
   "parallelworlds.teleport.no_return_pos": "No return position saved — returned to world spawn.",
   "parallelworlds.teleport.dismounted": "Dismounted for dimensional travel.",
   "parallelworlds.teleport.cooldown": "Teleport cooldown: %ss remaining",
+  "parallelworlds.teleport.blocked_into": "You cannot teleport into an exploration dimension.",
+  "parallelworlds.teleport.blocked_inside": "You cannot teleport while inside an exploration dimension.",
 
   "parallelworlds.admin.dim_manager_unavailable": "Dimension manager not available.",
   "parallelworlds.admin.returnall.success": "Evacuated all players from exploration dimensions.",

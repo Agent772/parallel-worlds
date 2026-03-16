@@ -18,6 +18,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.CommandEvent;
+import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
@@ -220,6 +222,21 @@ public final class PWEventHandlers {
     public static void onPlayerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         AsyncChunkHint.onPlayerTick(player);
+    }
+
+    // ── Block vanilla /tp while inside an exploration dimension ──
+
+    @SubscribeEvent
+    public static void onTeleportCommand(EntityTeleportEvent.TeleportCommand event) {
+        if (!PWConfig.isBlockVanillaTeleportInside()) return;
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (player.hasPermissions(2)) return;
+        if (!DimensionUtils.isExplorationDimension(player.level().dimension())) return;
+        event.setCanceled(true);
+        player.displayClientMessage(
+                Component.translatable("parallelworlds.teleport.blocked_inside")
+                        .withStyle(ChatFormatting.RED),
+                true);
     }
 
     // ── Helpers ──

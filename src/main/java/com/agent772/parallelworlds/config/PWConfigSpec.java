@@ -81,6 +81,10 @@ public final class PWConfigSpec {
     public static final ModConfigSpec.BooleanValue COMMAND_TP_ENABLED;
     public static final ModConfigSpec.BooleanValue COMMAND_RETURN_ENABLED;
 
+    // Teleport blocking
+    public static final ModConfigSpec.BooleanValue BLOCK_VANILLA_TP_INTO;
+    public static final ModConfigSpec.BooleanValue BLOCK_VANILLA_TP_INSIDE;
+
     public enum ResetSchedule { DAILY, WEEKLY, MONTHLY }
     public enum WeekDay { MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY }
     public enum RestrictionMode { BLOCK, WARN, ALLOW }
@@ -286,6 +290,18 @@ public final class PWConfigSpec {
                          "they will respawn in the overworld instead. Recommended to keep enabled",
                          "since exploration dimensions are temporary and may be deleted on seed rotation.")
                 .define("preventExplorationSpawn", true);
+        BLOCK_VANILLA_TP_INTO = builder
+                .comment("",
+                         "Block non-operator players from teleporting INTO an exploration dimension from outside.",
+                         "Covers vanilla /tp AND FTB Essentials /home, /back, /warp, /tpa.",
+                         "Portal teleports and /pw tp are not affected by this setting.")
+                .define("blockVanillaTeleportInto", false);
+        BLOCK_VANILLA_TP_INSIDE = builder
+                .comment("",
+                         "Block non-operator players from teleporting WHILE INSIDE an exploration dimension.",
+                         "Covers vanilla /tp AND FTB Essentials /home, /back, /warp, /tpa.",
+                         "This prevents position-hopping and cross-dim escapes inside the mining world.")
+                .define("blockVanillaTeleportInside", false);
         builder.pop();
 
         // ── Dimension Locks ──
