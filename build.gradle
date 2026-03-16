@@ -117,6 +117,9 @@ configurations {
 }
 
 dependencies {
+    // Jade optional compatibility (compileOnly — not required at runtime)
+    compileOnly files("run/mods/Jade-1.21.1-NeoForge-15.10.1.jar")
+
     // Create mod dependencies
     // implementation("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
     // implementation("net.createmod.ponder:Ponder-NeoForge-${minecraft_version}:${ponder_version}")

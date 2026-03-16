@@ -7,6 +7,7 @@
   "parallelworlds.message.dimension_reset": "Exploration dimension %s has been reset",
   "parallelworlds.message.reset_warning": "Mining dimension resets in %s minutes",
   "parallelworlds.portal.target": "Portal target: %s",
+  "jade.parallelworlds.portal_dest": "Destination: %s",
   "parallelworlds.portal.cycling_disabled": "Portal cycling is disabled",
   "parallelworlds.message.mod_cleanup": "Cleaned up cached mod data for %s deleted dimensions",
 

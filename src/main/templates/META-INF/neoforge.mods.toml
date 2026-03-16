@@ -29,3 +29,10 @@ config="parallelworlds.mixins.json"
     versionRange="${minecraft_version_range}"
     ordering="NONE"
     side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="jade"
+    type="optional"
+    versionRange="[15.0.0,)"
+    ordering="NONE"
+    side="BOTH"
