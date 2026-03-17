@@ -29,6 +29,9 @@ public final class ModDataCleanupHandler {
     public static void onDimensionCleanupReceived(DimensionCleanupPayload payload, IPayloadContext context) {
         if (!PWConfig.isModCompatCleanupEnabled()) return;
 
+        // enqueueWork only to safely read gameDirectory on the render thread.
+        // All file I/O is then handed off to a daemon background thread so the
+        // render thread is never blocked by directory walks or file deletions.
         context.enqueueWork(() -> {
             List<String> safePaths = payload.deletedDimensionPaths().stream()
                     .filter(ModDataCleanupHandler::isValidDimPath)
@@ -36,20 +39,24 @@ public final class ModDataCleanupHandler {
 
             if (safePaths.isEmpty()) return;
 
-            // Active paths let the client scope cleanup to the current server's folder only.
             List<String> safeActivePaths = payload.activeDimensionPaths().stream()
                     .filter(ModDataCleanupHandler::isValidDimPath)
                     .toList();
 
-            LOGGER.info("Received cleanup notification for {} dimension(s) ({} currently active)",
-                    safePaths.size(), safeActivePaths.size());
-
             Path gameDir = Minecraft.getInstance().gameDirectory.toPath();
 
-            cleanupXaeroWorldMap(gameDir, safePaths, safeActivePaths);
-            cleanupXaeroMinimap(gameDir, safePaths, safeActivePaths);
-            cleanupJourneyMap(gameDir, safePaths, safeActivePaths);
-            cleanupDistantHorizons(gameDir, safePaths, safeActivePaths);
+            Thread cleanupThread = new Thread(() -> {
+                LOGGER.info("Received cleanup notification for {} dimension(s) ({} currently active)",
+                        safePaths.size(), safeActivePaths.size());
+                cleanupXaeroWorldMap(gameDir, safePaths, safeActivePaths);
+                cleanupXaeroMinimap(gameDir, safePaths, safeActivePaths);
+                cleanupJourneyMap(gameDir, safePaths, safeActivePaths);
+                cleanupDistantHorizons(gameDir, safePaths, safeActivePaths);
+                LOGGER.info("Mod data cleanup complete");
+            }, "PW-ModDataCleanup");
+            cleanupThread.setDaemon(true);
+            cleanupThread.setPriority(Thread.MIN_PRIORITY);
+            cleanupThread.start();
         });
     }
 
@@ -185,15 +192,28 @@ public final class ModDataCleanupHandler {
     private static void cleanupDistantHorizons(Path gameDir, List<String> deletedPaths, List<String> activePaths) {
         if (!isModLoaded("distanthorizons")) return;
 
-        Path dhRoot = gameDir.resolve("config").resolve("DistantHorizons").resolve("data");
-        if (!Files.isDirectory(dhRoot)) return;
+        // DH 2.x (1.20+) saves to `Distant_Horizons_server_data/<server>/<sessionId>@<namespace>@@<dimPath>/`
+        // Older DH used `config/DistantHorizons/data/<server>/DIM%<namespace>%<dimPath>` or `_` separator.
+        // Try both locations; whichever contains matching entries is cleaned.
+        Path dhRoot2x = gameDir.resolve("Distant_Horizons_server_data");
+        Path dhRootOld = gameDir.resolve("config").resolve("DistantHorizons").resolve("data");
 
-        // DH uses substring matching for dim entries. Build pattern lists for both
-        // variant separators DH uses (% and _).
-        List<String> activePatterns  = dhPatterns(activePaths);
-        List<String> deletedPatterns = dhPatterns(deletedPaths);
+        if (Files.isDirectory(dhRoot2x)) {
+            // DH 2.x: entry name format is `{sessionId}@{namespace}@@{dimPath}`.
+            // Match on `@{namespace}@@{dimPath}` so the session-id prefix is ignored.
+            List<String> activePatterns  = dhPatternsNew(activePaths);
+            List<String> deletedPatterns = dhPatternsNew(deletedPaths);
+            cleanupDhRoot(dhRoot2x, activePatterns, deletedPatterns);
+        }
+        if (Files.isDirectory(dhRootOld)) {
+            // Older DH: `{namespace}%{dimPath}` or `{namespace}_{dimPath}` separators.
+            List<String> activePatterns  = dhPatternsOld(activePaths);
+            List<String> deletedPatterns = dhPatternsOld(deletedPaths);
+            cleanupDhRoot(dhRootOld, activePatterns, deletedPatterns);
+        }
+    }
 
-        // Scope to the current server's directory.
+    private static void cleanupDhRoot(Path dhRoot, List<String> activePatterns, List<String> deletedPatterns) {
         Set<Path> scopedDirs = findServerDirsContainingEntry(dhRoot, activePatterns);
         if (scopedDirs.isEmpty()) {
             scopedDirs = findServerDirsContainingEntry(dhRoot, deletedPatterns);
@@ -202,7 +222,7 @@ public final class ModDataCleanupHandler {
             }
         }
         if (scopedDirs.isEmpty()) {
-            LOGGER.debug("[Distant Horizons] No matching server directories, skipping cleanup");
+            LOGGER.debug("[Distant Horizons] No matching server directories in {}, skipping", dhRoot);
             return;
         }
         for (Path serverDir : scopedDirs) {
@@ -216,8 +236,20 @@ public final class ModDataCleanupHandler {
         }
     }
 
-    /** Produce both separator variants DH can use for a list of dim paths. */
-    private static List<String> dhPatterns(List<String> dimPaths) {
+    /**
+     * DH 2.x entry name: `{sessionId}@{namespace}@@{dimPath}`.
+     * We match on `@{namespace}@@{dimPath}` so the per-session prefix is ignored.
+     */
+    private static List<String> dhPatternsNew(List<String> dimPaths) {
+        List<String> result = new ArrayList<>(dimPaths.size());
+        for (String p : dimPaths) {
+            result.add("@" + ParallelWorlds.MOD_ID + "@@" + p);
+        }
+        return result;
+    }
+
+    /** Older DH separator variants (`%` and `_`). */
+    private static List<String> dhPatternsOld(List<String> dimPaths) {
         List<String> result = new ArrayList<>(dimPaths.size() * 2);
         for (String p : dimPaths) {
             result.add(ParallelWorlds.MOD_ID + "%" + p);

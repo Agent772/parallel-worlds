@@ -2,6 +2,7 @@ package com.agent772.parallelworlds;
 
 import com.agent772.parallelworlds.command.PWAdminCommands;
 import com.agent772.parallelworlds.command.PWCommands;
+import com.agent772.parallelworlds.config.PWClientConfigSpec;
 import com.agent772.parallelworlds.config.PWConfig;
 import com.agent772.parallelworlds.config.PWConfigSpec;
 import com.agent772.parallelworlds.dimension.*;
@@ -58,6 +59,9 @@ public class ParallelWorlds {
         // Register server config
         modContainer.registerConfig(ModConfig.Type.SERVER, PWConfigSpec.SPEC);
 
+        // Register client config (local client only, never synced)
+        modContainer.registerConfig(ModConfig.Type.CLIENT, PWClientConfigSpec.CLIENT_SPEC);
+
         // Listen for config loading/reloading on the mod bus
         modEventBus.addListener(this::onConfigLoad);
         modEventBus.addListener(this::onConfigReload);
@@ -93,6 +97,8 @@ public class ParallelWorlds {
             PWConfig.refresh();
             DimensionColors.refresh();
             LOGGER.info("Parallel Worlds config loaded");
+        } else if (event.getConfig().getType() == ModConfig.Type.CLIENT) {
+            PWConfig.refreshClient();
         }
     }
 
@@ -101,6 +107,8 @@ public class ParallelWorlds {
             PWConfig.refresh();
             DimensionColors.refresh();
             LOGGER.info("Parallel Worlds config reloaded");
+        } else if (event.getConfig().getType() == ModConfig.Type.CLIENT) {
+            PWConfig.refreshClient();
         }
     }
 
@@ -146,8 +154,12 @@ public class ParallelWorlds {
         // Initialize pre-generator and resume any saved tasks
         chunkPreGenerator = new ChunkPreGenerator();
 
-        // Initialize async worker pool if enabled
-        if (PWConfig.isAsyncChunkGenEnabled()) {
+        // Only spin up worker threads if something will actually use them.
+        // asyncChunkGenEnabled is the master switch, but if neither pregen nor
+        // movement hints are on, there's no work to submit — don't waste threads.
+        boolean needsWorkers = PWConfig.isAsyncChunkGenEnabled()
+                && (PWConfig.isPregenEnabled() || PWConfig.isAsyncChunkHintsEnabled());
+        if (needsWorkers) {
             asyncWorkerPool = new AsyncChunkWorkerPool(
                     PWConfig.getAsyncMaxInFlight(),
                     PWConfig.getAsyncWorkerThreads());
@@ -157,6 +169,16 @@ public class ParallelWorlds {
 
         if (PWConfig.isPregenEnabled()) {
             chunkPreGenerator.resumeSavedTasks(server);
+
+            // Auto-start pregen for any freshly created exploration dimensions.
+            // Freshly created means no saved data existed (new seed, first run, or rotation).
+            // Reused dims (PERSIST mode, unchanged seed) already have terrain on disk — skip them.
+            int pregenRadius = PWConfig.getPregenRadius();
+            for (var freshKey : DimensionRegistrar.getInstance().getFreshlyCreatedKeys()) {
+                if (!chunkPreGenerator.hasTask(freshKey)) {
+                    chunkPreGenerator.startGeneration(server, freshKey, pregenRadius);
+                }
+            }
         }
 
         // Supply runtime instances to admin commands and event handlers

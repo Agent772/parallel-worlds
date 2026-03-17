@@ -53,6 +53,7 @@ public final class PWConfigSpec {
     public static final ModConfigSpec.BooleanValue AGGRESSIVE_CHUNK_UNLOADING;
     public static final ModConfigSpec.BooleanValue PREVENT_DISK_SAVES;
     public static final ModConfigSpec.BooleanValue PREGEN_ENABLED;
+    public static final ModConfigSpec.IntValue PREGEN_RADIUS;
     public static final ModConfigSpec.IntValue PREGEN_CHUNKS_PER_TICK;
     public static final ModConfigSpec.IntValue PREGEN_MAX_TICK_MS;
     public static final ModConfigSpec.DoubleValue PREGEN_MIN_TPS;
@@ -75,9 +76,6 @@ public final class PWConfigSpec {
     // Dimension locks
     public static final ModConfigSpec.BooleanValue DIMENSION_LOCKS_ENABLED;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> DIMENSION_LOCKS;
-
-    // Compatibility
-    public static final ModConfigSpec.BooleanValue MOD_COMPAT_CLEANUP_ENABLED;
 
     // Commands
     public static final ModConfigSpec.BooleanValue COMMAND_TP_ENABLED;
@@ -256,6 +254,12 @@ public final class PWConfigSpec {
         PREGEN_ENABLED = builder
                 .comment("", "Enable chunk pre-generation for mining dimensions")
                 .define("pregenEnabled", false);
+        PREGEN_RADIUS = builder
+                .comment("",
+                         "Chunk radius to pre-generate around spawn when a new exploration dimension is created.",
+                         "Requires pregenEnabled=true. Radius N generates a (2N+1)\u00d7(2N+1) chunk square around spawn.",
+                         "Radius 3 = 7\u00d77 = 49 chunks (~112\u00d7112 blocks). Increase if players wander far before terrain loads.")
+                .defineInRange("pregenRadius", 3, 1, 16);
         PREGEN_CHUNKS_PER_TICK = builder
                 .comment("", "Maximum chunks to process per server tick during pre-generation")
                 .defineInRange("pregenChunksPerTick", 2, 1, 20);
@@ -282,7 +286,9 @@ public final class PWConfigSpec {
         ASYNC_WORKER_THREADS = builder
                 .comment("",
                          "Worker thread count for async chunk computation.",
-                         "-1 = auto (availableProcessors - 2, minimum 1)")
+                         "-1 = auto (min(4, availableProcessors - 2), minimum 1).",
+                         "Reduce to 2 when running alongside Distant Horizons, JourneyMap, or other LOD/mapping mods.",
+                         "High values on 16+ core machines compete with those mods' own thread pools and cause client stutters.")
                 .defineInRange("asyncWorkerThreads", -1, -1, 32);
         ASYNC_CHUNK_HINTS_ENABLED = builder
                 .comment("",
@@ -375,15 +381,6 @@ public final class PWConfigSpec {
                         List.of(),
                         () -> "",
                         o -> o instanceof String s && s.contains("=") && s.contains(":"));
-        builder.pop();
-
-        // ── Compatibility ──
-        builder.push("compatibility");
-        MOD_COMPAT_CLEANUP_ENABLED = builder
-                .comment("Enable automatic cleanup of third-party mod cached data",
-                         "(Xaero's Map, JourneyMap, Distant Horizons) when exploration",
-                         "dimensions are regenerated or deleted.")
-                .define("modCompatCleanupEnabled", true);
         builder.pop();
 
         // ── Commands ──

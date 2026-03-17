@@ -9,6 +9,7 @@
   "parallelworlds.message.reset_warning": "Mining dimension resets in %s minutes",
   "parallelworlds.portal.target": "Portal target: %s",
   "jade.parallelworlds.portal_dest": "Destination: %s",
+  "config.jade.plugin_parallelworlds.portal_target": "Show Portal Target",
   "parallelworlds.portal.cycling_disabled": "Portal cycling is disabled",
   "parallelworlds.portal.ignite.no_permission": "You don't have permission to ignite portals here. Ask a server operator.",
   "parallelworlds.portal.cycle.no_permission": "You don't have permission to cycle portal targets. Ask a server operator.",

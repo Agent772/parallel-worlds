@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * Thread pool that manages async chunk noise computation.
@@ -21,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class AsyncChunkWorkerPool {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    private final ExecutorService executor;
+    private final ThreadPoolExecutor executor;
     private final int maxInFlight;
     private final AtomicInteger inFlightCount = new AtomicInteger(0);
     private final Set<Long> submittedChunks = ConcurrentHashMap.newKeySet();
@@ -35,14 +36,16 @@ public class AsyncChunkWorkerPool {
     public AsyncChunkWorkerPool(int maxInFlight, int workerThreads) {
         this.maxInFlight = maxInFlight;
 
+        // Cap auto-detected threads at 4 to avoid starving DH/JourneyMap/other
+        // heavy thread pools on high-core-count machines (e.g. 16-core → 14 without cap).
         int threadCount = workerThreads > 0
                 ? workerThreads
-                : Math.max(1, Runtime.getRuntime().availableProcessors() - 2);
+                : Math.min(4, Math.max(1, Runtime.getRuntime().availableProcessors() - 2));
 
-        LOGGER.info("Parallel Worlds: Starting async chunk worker pool with {} threads, max {} in-flight",
+        LOGGER.info("Parallel Worlds: Async chunk worker pool configured ({} max threads, {} max in-flight) — threads created on demand",
                 threadCount, maxInFlight);
 
-        this.executor = Executors.newFixedThreadPool(threadCount, new ThreadFactory() {
+        ThreadFactory threadFactory = new ThreadFactory() {
             private final AtomicInteger counter = new AtomicInteger(0);
 
             @Override
@@ -52,7 +55,20 @@ public class AsyncChunkWorkerPool {
                 t.setPriority(Thread.NORM_PRIORITY - 1);
                 return t;
             }
-        });
+        };
+
+        // Use a bounded queue matching maxInFlight so submitted tasks can queue behind
+        // running ones without rejection while we're under the in-flight cap.
+        // corePoolSize == maximumPoolSize so threads are created lazily (one per task)
+        // up to the limit, then allowCoreThreadTimeOut kills them after 60s of idleness.
+        // No threads are pre-spawned or permanently parked.
+        this.executor = new ThreadPoolExecutor(
+                threadCount, threadCount,
+                30L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(maxInFlight),
+                threadFactory,
+                new ThreadPoolExecutor.AbortPolicy());
+        this.executor.allowCoreThreadTimeOut(true);
     }
 
     /**

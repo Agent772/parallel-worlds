@@ -49,6 +49,7 @@ public final class PWConfig {
     private static boolean aggressiveChunkUnloading;
     private static boolean preventDiskSaves;
     private static boolean pregenEnabled;
+    private static int pregenRadius;
     private static int pregenChunksPerTick;
     private static int pregenMaxTickMs;
     private static double pregenMinTps;
@@ -133,6 +134,7 @@ public final class PWConfig {
         aggressiveChunkUnloading = PWConfigSpec.AGGRESSIVE_CHUNK_UNLOADING.get();
         preventDiskSaves = PWConfigSpec.PREVENT_DISK_SAVES.get();
         pregenEnabled = PWConfigSpec.PREGEN_ENABLED.get();
+        pregenRadius = PWConfigSpec.PREGEN_RADIUS.get();
         pregenChunksPerTick = PWConfigSpec.PREGEN_CHUNKS_PER_TICK.get();
         pregenMaxTickMs = PWConfigSpec.PREGEN_MAX_TICK_MS.get();
         pregenMinTps = PWConfigSpec.PREGEN_MIN_TPS.get();
@@ -153,8 +155,6 @@ public final class PWConfig {
         dimensionLocksEnabled = PWConfigSpec.DIMENSION_LOCKS_ENABLED.get();
         dimensionLocks = (List<String>) PWConfigSpec.DIMENSION_LOCKS.get();
 
-        modCompatCleanupEnabled = PWConfigSpec.MOD_COMPAT_CLEANUP_ENABLED.get();
-
         commandTpEnabled = PWConfigSpec.COMMAND_TP_ENABLED.get();
         commandReturnEnabled = PWConfigSpec.COMMAND_RETURN_ENABLED.get();
 
@@ -167,6 +167,11 @@ public final class PWConfig {
         deathRecallChargeTicks = PWConfigSpec.DEATH_RECALL_CHARGE_TICKS.get();
         deathRecallCooldownSeconds = PWConfigSpec.DEATH_RECALL_COOLDOWN_SECONDS.get();
         deathRecallExpireSeconds = PWConfigSpec.DEATH_RECALL_EXPIRE_SECONDS.get();
+    }
+
+    /** Refresh client-only cached values from the client config spec. Called on client load/reload. */
+    public static void refreshClient() {
+        modCompatCleanupEnabled = PWClientConfigSpec.MOD_COMPAT_CLEANUP_ENABLED.get();
     }
 
     // ── Getters ──
@@ -206,6 +211,7 @@ public final class PWConfig {
     public static boolean isAggressiveChunkUnloading() { return aggressiveChunkUnloading; }
     public static boolean isPreventDiskSaves() { return preventDiskSaves; }
     public static boolean isPregenEnabled() { return pregenEnabled; }
+    public static int getPregenRadius() { return pregenRadius; }
     public static int getPregenChunksPerTick() { return pregenChunksPerTick; }
     public static int getPregenMaxTickMs() { return pregenMaxTickMs; }
     public static double getPregenMinTps() { return pregenMinTps; }

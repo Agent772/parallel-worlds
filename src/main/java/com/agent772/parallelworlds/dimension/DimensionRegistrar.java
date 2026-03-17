@@ -5,11 +5,16 @@ import com.agent772.parallelworlds.config.PWConfigSpec;
 import com.agent772.parallelworlds.data.DimensionMetadata;
 import com.agent772.parallelworlds.data.PWSavedData;
 import com.agent772.parallelworlds.dimension.SeedStore;
+import com.agent772.parallelworlds.portal.PortalBuilder;
+import com.agent772.parallelworlds.teleport.TeleportHandler;
 import com.mojang.logging.LogUtils;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
@@ -28,6 +33,8 @@ public final class DimensionRegistrar {
     private final Map<ResourceKey<Level>, ServerLevel> runtimeDimensions = new ConcurrentHashMap<>();
     private final Map<ResourceLocation, ResourceKey<Level>> dimensionMappings = new ConcurrentHashMap<>();
     private final Map<ResourceKey<Level>, Long> dimensionSeeds = new ConcurrentHashMap<>();
+    /** Dims created fresh (not reused) during this server start — used to auto-start pregen. */
+    private final Set<ResourceKey<Level>> freshlyCreatedKeys = new HashSet<>();
 
     private DimensionRegistrar() {}
 
@@ -135,6 +142,38 @@ public final class DimensionRegistrar {
                     }
 
                     LOGGER.info("Created exploration dimension {} (seed {})", explorationKey.location(), seed);
+
+                    if (!shouldReuse) {
+                        freshlyCreatedKeys.add(explorationKey);
+                    }
+
+                    // Pre-build the entry portal at server startup for freshly created dims.
+                    // Doing this in a deferred TickTask means the tick loop is live, so
+                    // the blocking getChunk(FULL) inside resolveSpawnPosition can drain chunk
+                    // worker results normally.  The 15-second generation cost moves to tick 1
+                    // (no players connected yet) instead of hitting the first player to enter.
+                    // PWSavedData.getExplorationPortalPos() will find the saved portal, so
+                    // PWPortalBlock skips resolveSpawnPosition entirely on first entry.
+                    if (!shouldReuse) {
+                        final ServerLevel warmLevel = level;
+                        final ResourceKey<Level> warmKey = explorationKey;
+                        server.tell(new TickTask(server.getTickCount() + 1, () -> {
+                            try {
+                                PWSavedData warmData = PWSavedData.get(server);
+                                // Only build if not already saved (guard against duplicate tasks)
+                                if (warmData.getExplorationPortalPos(warmKey.location()).isPresent()) {
+                                    return;
+                                }
+                                LOGGER.info("Pre-building entry portal for {} (generating spawn chunk)", warmKey.location());
+                                BlockPos safePos = TeleportHandler.resolveSpawnPosition(warmLevel);
+                                BlockPos portalPos = PortalBuilder.buildPortal(warmLevel, safePos, Direction.Axis.Z);
+                                warmData.saveExplorationPortal(warmKey.location(), portalPos, Direction.Axis.Z);
+                                LOGGER.info("Pre-built entry portal for {} at {}", warmKey.location(), portalPos);
+                            } catch (Exception e) {
+                                LOGGER.error("Failed to pre-build entry portal for {}", warmKey.location(), e);
+                            }
+                        }));
+                    }
                 } else {
                     LOGGER.error("Failed to create exploration dimension for {}", baseDim);
                 }
@@ -146,6 +185,11 @@ public final class DimensionRegistrar {
     }
 
     // ── Lookups ──
+
+    /** Dims that were freshly created (not reused) this server start. Used to auto-start pregen. */
+    public Set<ResourceKey<Level>> getFreshlyCreatedKeys() {
+        return Collections.unmodifiableSet(freshlyCreatedKeys);
+    }
 
     public Map<ResourceKey<Level>, ServerLevel> getRuntimeDimensions() {
         return Collections.unmodifiableMap(runtimeDimensions);

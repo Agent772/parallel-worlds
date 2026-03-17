@@ -74,13 +74,13 @@ public final class PWEventHandlers {
             // Sync all active exploration dimensions to the joining player
             PWNetworking.syncAllDimensionsToPlayer(player);
 
-            // Send pending mod data cleanup notifications
-            if (PWConfig.isModCompatCleanupEnabled()) {
+            // Send pending mod data cleanup notifications.
+            // No server-side gate on modCompatCleanupEnabled — that is a client setting
+            // and unavailable on a dedicated server. The client handler checks it instead.
+            {
                 PWSavedData data = PWSavedData.get(player.server);
                 java.util.Set<String> pending = data.getPendingCleanups();
                 if (!pending.isEmpty() && !data.isPlayerNotified(player.getUUID())) {
-                    // Include currently-active dim paths so the client can scope cleanup
-                    // to the correct server directory (avoids touching other servers' Xaero data).
                     var activePaths = DimensionRegistrar.getExplorationDimensionIds()
                             .stream().map(ResourceLocation::getPath).toList();
                     PWNetworking.sendDimensionCleanup(player, new java.util.ArrayList<>(pending), activePaths);
