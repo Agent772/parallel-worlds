@@ -210,7 +210,7 @@ These require a live server + client and cannot be covered by unit or GameTest a
 - [x] **Xaero's Minimap** — same as above for minimap data under `XaeroMinimap/`
 - [x] **JourneyMap** — confirm `journeymap/data/mp/<server>/<dimpath>/` is cleared on reconnect after rotation
 - [x] **Distant Horizons (client)** — confirm matching SQLite DB files in `config/DistantHorizons/data/<server>/` are deleted after dimension rotation
-- [ ] **No mods installed** — cleanup packet triggers with none of the above mods present; no errors logged
+- [x] **No mods installed** — cleanup packet received but no thread spawned and no errors logged (early-exit added before mod checks)
 - [ ] **Config toggle** — set `modCompatCleanupEnabled = false`; confirm no cleanup occurs and no packet is sent
 
 ### Shader Dimension Detection

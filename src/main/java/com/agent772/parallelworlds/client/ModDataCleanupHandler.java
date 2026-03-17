@@ -43,6 +43,13 @@ public final class ModDataCleanupHandler {
                     .filter(ModDataCleanupHandler::isValidDimPath)
                     .toList();
 
+            // Skip entirely if none of the supported mods are present — no thread, no log noise
+            if (!isModLoaded("xaeroworldmap") && !isModLoaded("xaerominimap")
+                    && !isModLoaded("journeymap") && !isModLoaded("distanthorizons")) {
+                LOGGER.debug("Cleanup packet received but no supported mapping mods are loaded — skipping");
+                return;
+            }
+
             Path gameDir = Minecraft.getInstance().gameDirectory.toPath();
 
             Thread cleanupThread = new Thread(() -> {
