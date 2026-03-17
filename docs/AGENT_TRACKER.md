@@ -211,7 +211,7 @@ These require a live server + client and cannot be covered by unit or GameTest a
 - [x] **JourneyMap** — confirm `journeymap/data/mp/<server>/<dimpath>/` is cleared on reconnect after rotation
 - [x] **Distant Horizons (client)** — confirm matching SQLite DB files in `config/DistantHorizons/data/<server>/` are deleted after dimension rotation
 - [x] **No mods installed** — cleanup packet received but no thread spawned and no errors logged (early-exit added before mod checks)
-- [ ] **Config toggle** — set `modCompatCleanupEnabled = false`; confirm no cleanup occurs and no packet is sent
+- [x] **Config toggle** — set `modCompatCleanupEnabled = false`; confirm no cleanup occurs and no packet is sent
 
 ### Shader Dimension Detection
 - [ ] **Iris/Oculus dimension detection** — confirm shader `isExplorationDimension` uniform (or equivalent) is set correctly when inside a `pw_*` dimension (shaders that check for special dimensions should treat it like overworld/nether/end as appropriate)
