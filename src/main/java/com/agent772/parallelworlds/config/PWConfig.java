@@ -30,6 +30,8 @@ public final class PWConfig {
     private static int portalDelayTicks;
     private static int portalMaxSize;
     private static boolean portalBuildingInExploration;
+    private static boolean portalIgniteOpOnly;
+    private static boolean portalCycleOpOnly;
 
     // Restrictions
     private static PWConfigSpec.RestrictionMode enderChestMode;
@@ -115,6 +117,8 @@ public final class PWConfig {
         portalDelayTicks = PWConfigSpec.PORTAL_DELAY_TICKS.get();
         portalMaxSize = PWConfigSpec.PORTAL_MAX_SIZE.get();
         portalBuildingInExploration = PWConfigSpec.PORTAL_BUILDING_IN_EXPLORATION.get();
+        portalIgniteOpOnly = PWConfigSpec.PORTAL_IGNITE_OP_ONLY.get();
+        portalCycleOpOnly = PWConfigSpec.PORTAL_CYCLE_OP_ONLY.get();
 
         enderChestMode = PWConfigSpec.ENDER_CHEST_MODE.get();
         restrictedItems = (List<String>) PWConfigSpec.RESTRICTED_ITEMS.get();
@@ -186,6 +190,8 @@ public final class PWConfig {
     public static int getPortalDelayTicks() { return portalDelayTicks; }
     public static int getPortalMaxSize() { return portalMaxSize; }
     public static boolean isPortalBuildingInExplorationEnabled() { return portalBuildingInExploration; }
+    public static boolean isPortalIgniteOpOnly() { return portalIgniteOpOnly; }
+    public static boolean isPortalCycleOpOnly() { return portalCycleOpOnly; }
 
     public static PWConfigSpec.RestrictionMode getEnderChestMode() { return enderChestMode; }
     public static List<String> getRestrictedItems() { return restrictedItems; }

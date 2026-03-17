@@ -7,7 +7,9 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
@@ -42,6 +44,7 @@ public final class PortalActivation {
                 && !PWConfig.isPortalBuildingInExplorationEnabled()) {
             return;
         }
+
         BlockPos clickedPos = event.getPos();
         BlockState clickedState = level.getBlockState(clickedPos);
 
@@ -51,6 +54,18 @@ public final class PortalActivation {
         // Must be holding the igniter item
         ItemStack heldItem = event.getItemStack();
         if (!isIgniterItem(heldItem)) return;
+
+        // Block portal ignition in non-exploration dimensions for non-ops when config requires it
+        // This check is intentionally after the frame+igniter guards so normal block placement is unaffected.
+        if (level instanceof ServerLevel serverLevel
+                && !DimensionUtils.isExplorationDimension(serverLevel.dimension())
+                && PWConfig.isPortalIgniteOpOnly()
+                && event.getEntity() instanceof ServerPlayer sp
+                && !serverLevel.getServer().getPlayerList().isOp(sp.getGameProfile())) {
+            sp.sendSystemMessage(Component.translatable("parallelworlds.portal.ignite.no_permission"));
+            event.setCanceled(true);
+            return;
+        }
 
         // Try to find a portal shape from the face the player clicked
         Direction face = event.getFace();

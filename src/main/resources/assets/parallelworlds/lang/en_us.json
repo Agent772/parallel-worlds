@@ -10,6 +10,8 @@
   "parallelworlds.portal.target": "Portal target: %s",
   "jade.parallelworlds.portal_dest": "Destination: %s",
   "parallelworlds.portal.cycling_disabled": "Portal cycling is disabled",
+  "parallelworlds.portal.ignite.no_permission": "You don't have permission to ignite portals here. Ask a server operator.",
+  "parallelworlds.portal.cycle.no_permission": "You don't have permission to cycle portal targets. Ask a server operator.",
   "parallelworlds.message.mod_cleanup": "Cleaned up cached mod data for %s deleted dimensions",
 
   "parallelworlds.command.no_dims_active": "No exploration dimensions are active.",

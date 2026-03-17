@@ -34,6 +34,8 @@ public final class PWConfigSpec {
     public static final ModConfigSpec.IntValue PORTAL_DELAY_TICKS;
     public static final ModConfigSpec.IntValue PORTAL_MAX_SIZE;
     public static final ModConfigSpec.BooleanValue PORTAL_BUILDING_IN_EXPLORATION;
+    public static final ModConfigSpec.BooleanValue PORTAL_IGNITE_OP_ONLY;
+    public static final ModConfigSpec.BooleanValue PORTAL_CYCLE_OP_ONLY;
 
     // Restrictions
     public static final ModConfigSpec.EnumValue<RestrictionMode> ENDER_CHEST_MODE;
@@ -184,6 +186,17 @@ public final class PWConfigSpec {
                          "If false, players must walk back to the auto-generated entry portal to leave.",
                          "If true (default), players can build additional portals that also lead home.")
                 .define("portalBuildingInExploration", true);
+        PORTAL_IGNITE_OP_ONLY = builder
+                .comment("",
+                         "If true, only server operators (permission level 2+) can ignite portals in non-exploration dimensions.",
+                         "Regular players will receive a message telling them they lack permission.",
+                         "Has no effect on portals inside exploration dimensions (controlled by portalBuildingInExploration).")
+                .define("portalIgniteOpOnly", false);
+        PORTAL_CYCLE_OP_ONLY = builder
+                .comment("",
+                         "If true, only server operators (permission level 2+) can cycle the portal target dimension.",
+                         "Regular players will receive a message telling them they lack permission.")
+                .define("portalCycleOpOnly", false);
         builder.pop();
 
         // ── Restrictions ──

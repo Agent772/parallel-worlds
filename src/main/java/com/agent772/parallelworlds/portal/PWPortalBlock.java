@@ -325,6 +325,14 @@ public class PWPortalBlock extends Block implements Portal {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 
+        // Block cycling for non-ops when config requires it
+        if (PWConfig.isPortalCycleOpOnly()
+                && player instanceof ServerPlayer sp
+                && !serverLevel.getServer().getPlayerList().isOp(sp.getGameProfile())) {
+            sp.sendSystemMessage(Component.translatable("parallelworlds.portal.cycle.no_permission"), true);
+            return ItemInteractionResult.FAIL;
+        }
+
         BlockPos canonical = findCanonicalPos(level, pos, state.getValue(AXIS));
         if (canonical == null) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
