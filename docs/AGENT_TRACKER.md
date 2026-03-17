@@ -206,9 +206,9 @@ After completing an epic, run `./gradlew build` and confirm no errors.
 These require a live server + client and cannot be covered by unit or GameTest automation. Check them off as you verify.
 
 ### Epic 14 — Third-Party Mod Data Cleanup
-- [ ] **Xaero's World Map** — regenerate a dimension, reconnect client with Xaero's World Map installed; confirm old dimension tiles are gone from `XaeroWorldMap/<server>/DIM%parallelworlds%<dimpath>/`
-- [ ] **Xaero's Minimap** — same as above for minimap data under `XaeroMinimap/`
-- [ ] **JourneyMap** — confirm `journeymap/data/mp/<server>/<dimpath>/` is cleared on reconnect after rotation
+- [x] **Xaero's World Map** — regenerate a dimension, reconnect client with Xaero's World Map installed; confirm old dimension tiles are gone from `XaeroWorldMap/<server>/DIM%parallelworlds%<dimpath>/`
+- [x] **Xaero's Minimap** — same as above for minimap data under `XaeroMinimap/`
+- [x] **JourneyMap** — confirm `journeymap/data/mp/<server>/<dimpath>/` is cleared on reconnect after rotation
 - [ ] **Distant Horizons (client)** — confirm matching SQLite DB files in `config/DistantHorizons/data/<server>/` are deleted after dimension rotation
 - [ ] **No mods installed** — cleanup packet triggers with none of the above mods present; no errors logged
 - [ ] **Config toggle** — set `modCompatCleanupEnabled = false`; confirm no cleanup occurs and no packet is sent

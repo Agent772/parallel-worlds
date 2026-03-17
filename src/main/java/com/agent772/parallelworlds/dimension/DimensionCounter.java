@@ -1,5 +1,6 @@
 package com.agent772.parallelworlds.dimension;
 
+import com.agent772.parallelworlds.ParallelWorlds;
 import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -56,6 +57,42 @@ public final class DimensionCounter {
         long id = counter.getAndIncrement();
         dirty = true;
         return id;
+    }
+
+    /**
+     * Allocate a fresh ID for REGENERATE_EACH_RESTART mode.
+     * <p>
+     * Reads the last-used (current) ID, advances by 1, then keeps advancing while
+     * that folder already exists on disk — this is the crash-proof safety net:
+     * even if the counter file was lost entirely, the disk scan will find a clean slot.
+     * <p>
+     * Saves the allocated ID as the new <em>current</em> (not current+1), so the
+     * file always reflects the dimension that is actually in use.
+     *
+     * @return the dimension number to use (e.g., 1 for {@code pw_overworld_1})
+     */
+    public static long allocateFreshId(ResourceLocation baseDimension, MinecraftServer server) {
+        String type = baseDimension.getPath();
+        // No entry means nothing was ever created → treat as -1 so candidate starts at 0.
+        long current = COUNTERS.containsKey(type) ? COUNTERS.get(type).get() : -1L;
+        long candidate = current + 1;
+
+        // Disk-safety: skip past any IDs whose folders already exist (e.g. after a crash
+        // where the counter file was not updated before shutdown).
+        Path dimRoot = server.getWorldPath(LevelResource.ROOT)
+                .resolve("dimensions")
+                .resolve(ParallelWorlds.MOD_ID);
+        while (Files.isDirectory(dimRoot.resolve("pw_" + type + "_" + candidate))) {
+            LOGGER.warn("Dimension folder pw_{}_{} already exists on disk, advancing to next ID",
+                    type, candidate);
+            candidate++;
+        }
+
+        // Store candidate as the new current (the ID now in use), not candidate+1.
+        COUNTERS.put(type, new AtomicLong(candidate));
+        dirty = true;
+        LOGGER.info("Allocated fresh dimension ID {} for {} (previous: {})", candidate, type, current);
+        return candidate;
     }
 
     public static long getCurrentCounter(ResourceLocation baseDimension) {

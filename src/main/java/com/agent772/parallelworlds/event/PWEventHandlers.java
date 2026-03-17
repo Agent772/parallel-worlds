@@ -5,6 +5,7 @@ import com.agent772.parallelworlds.data.PWSavedData;
 import com.agent772.parallelworlds.data.PlayerExplorationStats;
 import com.agent772.parallelworlds.data.ReturnPosition;
 import com.agent772.parallelworlds.dimension.DimensionManager;
+import com.agent772.parallelworlds.dimension.DimensionRegistrar;
 import com.agent772.parallelworlds.dimension.DimensionUtils;
 import com.agent772.parallelworlds.dimension.SeedManager;
 import com.agent772.parallelworlds.generation.async.AsyncChunkHint;
@@ -78,7 +79,11 @@ public final class PWEventHandlers {
                 PWSavedData data = PWSavedData.get(player.server);
                 java.util.Set<String> pending = data.getPendingCleanups();
                 if (!pending.isEmpty() && !data.isPlayerNotified(player.getUUID())) {
-                    PWNetworking.sendDimensionCleanup(player, new java.util.ArrayList<>(pending));
+                    // Include currently-active dim paths so the client can scope cleanup
+                    // to the correct server directory (avoids touching other servers' Xaero data).
+                    var activePaths = DimensionRegistrar.getExplorationDimensionIds()
+                            .stream().map(ResourceLocation::getPath).toList();
+                    PWNetworking.sendDimensionCleanup(player, new java.util.ArrayList<>(pending), activePaths);
                     data.markPlayerNotified(player.getUUID());
                 }
             }
@@ -294,6 +299,8 @@ public final class PWEventHandlers {
         if (player.hasPermissions(2)) return;
         // Allow Death Recall Token teleports to pass through regardless of config
         if (TeleportHandler.isRecallInProgress(player.getUUID())) return;
+        // Allow PW portal teleports to pass through regardless of config
+        if (TeleportHandler.isPortalInProgress(player.getUUID())) return;
         if (!DimensionUtils.isExplorationDimension(event.getDimension())) return;
         event.setCanceled(true);
         player.displayClientMessage(

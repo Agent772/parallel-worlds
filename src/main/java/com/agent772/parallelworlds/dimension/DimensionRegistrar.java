@@ -4,6 +4,7 @@ import com.agent772.parallelworlds.config.PWConfig;
 import com.agent772.parallelworlds.config.PWConfigSpec;
 import com.agent772.parallelworlds.data.DimensionMetadata;
 import com.agent772.parallelworlds.data.PWSavedData;
+import com.agent772.parallelworlds.dimension.SeedStore;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
@@ -48,39 +49,53 @@ public final class DimensionRegistrar {
         List<String> enabled = PWConfig.getEnabledDimensions();
         PWSavedData savedData = PWSavedData.get(server);
         boolean isPersistMode = PWConfig.getPersistenceMode() == PWConfigSpec.PersistenceMode.PERSIST_UNTIL_ROTATION;
-
-        // Determine if seed rotation is due
-        boolean rotationDue = SeedManager.isRotationDue(savedData.getLastResetEpochSecond());
-        if (rotationDue && PWConfig.isSeedRotationEnabled()) {
-            LOGGER.info("Seed rotation is due — generating new seeds for all dimensions");
-            savedData.clearAllSeeds();
-            savedData.clearAllDimensionKeys();
-            savedData.setLastResetEpochSecond(SeedManager.currentEpochSecond());
-        }
+        // Snapshot "now" once so all dims get the same registeredAt timestamp this startup.
+        long now = SeedManager.currentEpochSecond();
 
         for (String baseDimStr : enabled) {
             try {
                 ResourceLocation baseDim = ResourceLocation.parse(baseDimStr);
 
-                // Decide seed: reuse saved or generate new
-                long seed;
-                Optional<Long> savedSeed = savedData.getSavedSeed(baseDim);
+                // SeedStore is the single source of truth for seeds.
+                // initializeAndRotate() guarantees every enabled dim has a seed.
+                long seed = SeedStore.getSeed(baseDim)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "SeedStore has no seed for " + baseDim + " — initializeAndRotate() must be called first"));
 
-                if (isPersistMode && savedSeed.isPresent() && !rotationDue) {
-                    // Persist mode + saved seed exists + no rotation due → reuse
-                    seed = savedSeed.get();
-                    LOGGER.info("Reusing saved seed {} for {}", seed, baseDim);
+                // Timestamp comparison: if the seed is newer than the last time this
+                // dimension was registered, the dimension must be recreated with the new seed.
+                long seedCreatedAt = SeedStore.getSeedCreatedAt(baseDim);
+                long dimRegisteredAt = savedData.getDimensionRegisteredAt(baseDim);
+                boolean shouldReuse = isPersistMode
+                        && dimRegisteredAt > 0
+                        && seedCreatedAt <= dimRegisteredAt;
+
+                if (isPersistMode) {
+                    if (dimRegisteredAt <= 0) {
+                        LOGGER.info("[DimensionRegistrar] {} — PERSIST mode, no saved registration → RECREATE (first run)",
+                                baseDim);
+                    } else if (seedCreatedAt > dimRegisteredAt) {
+                        LOGGER.info("[DimensionRegistrar] {} — PERSIST mode, seed rotated: seedCreatedAt={} > dimRegisteredAt={} → RECREATE",
+                                baseDim, SeedManager.formatEpoch(seedCreatedAt), SeedManager.formatEpoch(dimRegisteredAt));
+                    } else {
+                        LOGGER.info("[DimensionRegistrar] {} — PERSIST mode, seed unchanged: seedCreatedAt={}, dimRegisteredAt={} → REUSE",
+                                baseDim, SeedManager.formatEpoch(seedCreatedAt), SeedManager.formatEpoch(dimRegisteredAt));
+                    }
                 } else {
-                    // Generate new seed (fresh start, rotation, or REGENERATE_EACH_RESTART)
-                    seed = SeedManager.generateSeed();
-                    LOGGER.info("Generated new seed {} for {}", seed, baseDim);
+                    LOGGER.info("[DimensionRegistrar] {} — REGENERATE mode → RECREATE (always fresh, dimRegisteredAt={})",
+                            baseDim, SeedManager.formatEpoch(dimRegisteredAt));
                 }
 
-                // In persist mode, try to re-register the exact same dimension key so that
-                // existing world data on disk is loaded instead of starting a fresh dimension.
-                Optional<ResourceLocation> savedKey = (isPersistMode && !rotationDue)
+                // In persist mode with an unchanged seed, reuse the same exploration key so
+                // existing world data on disk is loaded.  Otherwise create a fresh one.
+                Optional<ResourceLocation> savedKey = shouldReuse
                         ? savedData.getSavedDimensionKey(baseDim)
                         : Optional.empty();
+
+                // Remember the previous key for client mod-data cleanup before overwriting it.
+                Optional<ResourceLocation> prevKey = savedKey.isPresent()
+                        ? Optional.empty()   // reusing — nothing to clean
+                        : savedData.getSavedDimensionKey(baseDim);
 
                 ServerLevel level;
                 if (savedKey.isPresent()) {
@@ -98,13 +113,24 @@ public final class DimensionRegistrar {
                     dimensionMappings.put(baseDim, explorationKey);
                     dimensionSeeds.put(explorationKey, seed);
 
-                    // Persist seed and the exploration key for future restarts
-                    savedData.saveSeed(baseDim, seed);
+                    // Queue old key for client mod-data cleanup (Xaero, JourneyMap, etc.).
+                    prevKey.ifPresent(old -> {
+                        if (!old.equals(explorationKey.location())) {
+                            savedData.addPendingCleanup(old.getPath());
+                            LOGGER.info("Queued old dimension {} for client mod-data cleanup", old);
+                        }
+                    });
+
+                    // Persist the exploration key so PERSIST mode can reload it next restart.
                     savedData.saveDimensionKey(baseDim, explorationKey.location());
+                    if (!shouldReuse) {
+                        // Record when this dimension was (re)created so the next startup
+                        // can compare against seed.createdAt to detect a pending rotation.
+                        savedData.saveDimensionRegisteredAt(baseDim, now);
+                    }
                     DimensionMetadata meta = savedData.getDimensionMetadata(explorationKey.location())
                             .orElse(null);
-                    if (meta == null || rotationDue) {
-                        // New metadata for fresh or rotated dimensions
+                    if (meta == null || !shouldReuse) {
                         savedData.recordDimensionAccess(explorationKey.location(), null);
                     }
 

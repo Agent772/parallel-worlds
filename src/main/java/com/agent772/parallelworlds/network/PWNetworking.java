@@ -94,7 +94,7 @@ public final class PWNetworking {
         PacketDistributor.sendToAllPlayers(new ResetWarningPayload(minutesRemaining, message));
     }
 
-    public static void sendDimensionCleanup(ServerPlayer player, List<String> deletedPaths) {
-        PacketDistributor.sendToPlayer(player, new DimensionCleanupPayload(deletedPaths));
+    public static void sendDimensionCleanup(ServerPlayer player, List<String> deletedPaths, List<String> activePaths) {
+        PacketDistributor.sendToPlayer(player, new DimensionCleanupPayload(deletedPaths, activePaths));
     }
 }

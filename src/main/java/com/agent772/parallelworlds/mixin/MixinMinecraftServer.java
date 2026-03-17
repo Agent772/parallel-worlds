@@ -25,6 +25,8 @@ import net.minecraft.world.level.storage.DerivedLevelData;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.level.storage.WorldData;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.level.LevelEvent;
 import org.slf4j.Logger;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -128,6 +130,9 @@ public abstract class MixinMinecraftServer implements IServerDimensionAccessor {
             levels.put(dimensionKey, newLevel);
             pw$runtimeLevels.put(dimensionKey, newLevel);
 
+            // Notify all mods (e.g. Distant Horizons, JourneyMap) that a new level is live.
+            NeoForge.EVENT_BUS.post(new LevelEvent.Load(newLevel));
+
             pw$LOGGER.info("Successfully created runtime dimension: {}", dimensionKey.location());
             return newLevel;
 
@@ -165,6 +170,9 @@ public abstract class MixinMinecraftServer implements IServerDimensionAccessor {
         try { level.close(); } catch (Exception e) {
             pw$LOGGER.error("Error closing dimension: {}", dimensionKey.location(), e);
         }
+
+        // Notify mods that this level is going away before we remove it from the map.
+        NeoForge.EVENT_BUS.post(new LevelEvent.Unload(level));
 
         levels.remove(dimensionKey);
         pw$cleanupRegistryEntries(server, dimensionKey);

@@ -111,12 +111,24 @@ public class ParallelWorlds {
         // Initialize counters from saved data
         DimensionCounter.initialize(server);
 
+        // ── Seed management (phase 1) ────────────────────────────────────────
+        // SeedStore is the single source of truth for exploration seeds.
+        // It checks whether a rotation is due, generates any missing seeds,
+        // and writes everything to disk atomically BEFORE any dimension is created.
+        // This means a crash after this line cannot cause a seed change on the
+        // next restart — the file is already on disk.
+        SeedStore.initializeAndRotate(server);
+
         // Clean up old dimension folders
         DimensionCleanup.cleanupOldDimensions(server);
 
         // Create exploration dimensions (uses PWSavedData for seed persistence)
         DimensionRegistrar.initialize();
         DimensionRegistrar.getInstance().createDimensionsOnServerStart(server);
+        // Eagerly flush the exploration dimension key mappings so a crash before the
+        // first auto-save cannot lose them.  Seeds are already on disk via SeedStore.
+        DimensionCounter.saveIfDirty();
+        server.overworld().getDataStorage().save();
 
         // Initialize teleport handler with persistence
         TeleportHandler.initialize(server);
@@ -205,6 +217,7 @@ public class ParallelWorlds {
 
         // Clear all runtime state
         DimensionRegistrar.cleanupOnShutdown();
+        SeedStore.clearAll();
         ExplorationSeedManager.clearAll();
         TeleportHandler.clearAll();
         PWPortalBlock.clearAll();

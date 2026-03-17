@@ -221,6 +221,7 @@ public class PWPortalBlock extends Block implements Portal {
 
         TeleportHandler.dismountBeforeTeleport(player);
         TeleportHandler.clearDangerousEffects(player);
+        TeleportHandler.markPortalInProgress(player.getUUID());
 
         // Calculate destination position (center of exploration portal)
         Vec3 destPos = PortalBuilder.getPortalCenter(explorationPortalPos, explorationAxis);
@@ -230,6 +231,7 @@ public class PWPortalBlock extends Block implements Portal {
                 player.getYRot(), player.getXRot(),
                 DimensionTransition.PLAY_PORTAL_SOUND.then(e -> {
                     if (e instanceof ServerPlayer sp) {
+                        TeleportHandler.clearPortalInProgress(sp.getUUID());
                         sp.displayClientMessage(
                                 Component.translatable("parallelworlds.teleport.success")
                                         .withStyle(ChatFormatting.GREEN), false);
@@ -279,12 +281,14 @@ public class PWPortalBlock extends Block implements Portal {
 
         TeleportHandler.dismountBeforeTeleport(player);
         TeleportHandler.clearDangerousEffects(player);
+        TeleportHandler.markPortalInProgress(player.getUUID());
 
         return new DimensionTransition(
                 returnLevel, destPos, Vec3.ZERO,
                 player.getYRot(), player.getXRot(),
                 DimensionTransition.PLAY_PORTAL_SOUND.then(e -> {
                     if (e instanceof ServerPlayer sp) {
+                        TeleportHandler.clearPortalInProgress(sp.getUUID());
                         TeleportHandler.removeReturnPosition(sp);
                         PWSavedData.get(sp.server).clearPlayerEntryPortal(sp.getUUID());
                         sp.displayClientMessage(

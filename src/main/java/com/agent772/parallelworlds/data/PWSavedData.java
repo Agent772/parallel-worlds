@@ -32,9 +32,10 @@ public class PWSavedData extends SavedData {
 
     // ── Data maps ──
     private final Map<UUID, ReturnPosition> playerReturnPositions = new HashMap<>();
-    private final Map<ResourceLocation, Long> dimensionSeeds = new HashMap<>();
     // baseDim -> exploration dim ResourceLocation (e.g. minecraft:overworld -> parallelworlds:pw_overworld_0)
     private final Map<ResourceLocation, ResourceLocation> dimensionKeys = new HashMap<>();
+    // baseDim -> epoch-second when the exploration dimension was last created (0 = never)
+    private final Map<ResourceLocation, Long> dimensionRegisteredAt = new HashMap<>();
     private final Map<ResourceLocation, DimensionMetadata> dimensionMetadata = new HashMap<>();
     private final Map<UUID, PlayerExplorationStats> playerStats = new HashMap<>();
     private final Set<ResourceLocation> activeDimensions = new HashSet<>();
@@ -46,14 +47,12 @@ public class PWSavedData extends SavedData {
     private final Map<UUID, CompoundTag> playerEntryPortals = new HashMap<>();
     private final Set<String> pendingCleanupDimensions = new HashSet<>();
     private final Set<UUID> cleanupNotifiedPlayers = new HashSet<>();
-    private long lastResetEpochSecond;
     // Pre-gen tasks — serialization is delegated to ChunkPreGenerator which manages
     // its own ListTag of task entries. This raw storage avoids duplicating the
     // serialization logic and is only read/written by ChunkPreGenerator.
     private net.minecraft.nbt.ListTag pregenTasks = new net.minecraft.nbt.ListTag();
 
     public PWSavedData() {
-        this.lastResetEpochSecond = 0;
     }
 
     // ── Factory ──
@@ -93,22 +92,6 @@ public class PWSavedData extends SavedData {
         }
     }
 
-    // ── Dimension seeds ──
-
-    public void saveSeed(ResourceLocation dimension, long seed) {
-        dimensionSeeds.put(dimension, seed);
-        setDirty();
-    }
-
-    public Optional<Long> getSavedSeed(ResourceLocation dimension) {
-        return Optional.ofNullable(dimensionSeeds.get(dimension));
-    }
-
-    public void clearAllSeeds() {
-        dimensionSeeds.clear();
-        setDirty();
-    }
-
     // ── Dimension key mapping (baseDim → exploration key) ──
 
     public void saveDimensionKey(ResourceLocation baseDim, ResourceLocation explorationKey) {
@@ -125,14 +108,14 @@ public class PWSavedData extends SavedData {
         setDirty();
     }
 
-    // ── Reset time ──
+    // ── Dimension registered-at timestamps (baseDim → epoch-second of last creation) ──
 
-    public long getLastResetEpochSecond() {
-        return lastResetEpochSecond;
+    public long getDimensionRegisteredAt(ResourceLocation baseDim) {
+        return dimensionRegisteredAt.getOrDefault(baseDim, 0L);
     }
 
-    public void setLastResetEpochSecond(long epochSecond) {
-        this.lastResetEpochSecond = epochSecond;
+    public void saveDimensionRegisteredAt(ResourceLocation baseDim, long epochSecond) {
+        dimensionRegisteredAt.put(baseDim, epochSecond);
         setDirty();
     }
 
@@ -374,20 +357,16 @@ public class PWSavedData extends SavedData {
                 returnPosTag.put(uuid.toString(), pos.toNbt()));
         tag.put("returnPositions", returnPosTag);
 
-        // Dimension seeds
-        CompoundTag seedsTag = new CompoundTag();
-        dimensionSeeds.forEach((dim, seed) ->
-                seedsTag.putLong(dim.toString(), seed));
-        tag.put("dimensionSeeds", seedsTag);
-
         // Dimension key mappings (baseDim -> exploration key)
         CompoundTag keysTag = new CompoundTag();
         dimensionKeys.forEach((baseDim, explorationKey) ->
                 keysTag.putString(baseDim.toString(), explorationKey.toString()));
         tag.put("dimensionKeys", keysTag);
 
-        // Last reset time
-        tag.putLong("lastResetEpochSecond", lastResetEpochSecond);
+        // Dimension registered-at timestamps
+        CompoundTag regAtTag = new CompoundTag();
+        dimensionRegisteredAt.forEach((baseDim, ts) -> regAtTag.putLong(baseDim.toString(), ts));
+        tag.put("dimensionRegisteredAt", regAtTag);
 
         // Dimension metadata
         CompoundTag metaTag = new CompoundTag();
@@ -469,19 +448,6 @@ public class PWSavedData extends SavedData {
             }
         }
 
-        // Dimension seeds
-        if (tag.contains("dimensionSeeds", Tag.TAG_COMPOUND)) {
-            CompoundTag seedsTag = tag.getCompound("dimensionSeeds");
-            for (String key : seedsTag.getAllKeys()) {
-                try {
-                    ResourceLocation dim = ResourceLocation.parse(key);
-                    data.dimensionSeeds.put(dim, seedsTag.getLong(key));
-                } catch (Exception e) {
-                    LOGGER.warn("Skipping malformed seed entry for key: {}", key);
-                }
-            }
-        }
-
         // Dimension key mappings (baseDim -> exploration key)
         if (tag.contains("dimensionKeys", Tag.TAG_COMPOUND)) {
             CompoundTag keysTag = tag.getCompound("dimensionKeys");
@@ -496,8 +462,17 @@ public class PWSavedData extends SavedData {
             }
         }
 
-        // Last reset time
-        data.lastResetEpochSecond = tag.getLong("lastResetEpochSecond");
+        // Dimension registered-at timestamps
+        if (tag.contains("dimensionRegisteredAt", Tag.TAG_COMPOUND)) {
+            CompoundTag regAtTag = tag.getCompound("dimensionRegisteredAt");
+            for (String key : regAtTag.getAllKeys()) {
+                try {
+                    data.dimensionRegisteredAt.put(ResourceLocation.parse(key), regAtTag.getLong(key));
+                } catch (Exception e) {
+                    LOGGER.warn("Skipping malformed dimensionRegisteredAt entry for key: {}", key);
+                }
+            }
+        }
 
         // Dimension metadata
         if (tag.contains("dimensionMetadata", Tag.TAG_COMPOUND)) {
@@ -575,8 +550,8 @@ public class PWSavedData extends SavedData {
             }
         }
 
-        LOGGER.info("Loaded PWSavedData: {} return positions, {} seeds, {} metadata entries, {} player stats, {} portal targets",
-                data.playerReturnPositions.size(), data.dimensionSeeds.size(),
+        LOGGER.info("Loaded PWSavedData: {} return positions, {} metadata entries, {} player stats, {} portal targets",
+                data.playerReturnPositions.size(),
                 data.dimensionMetadata.size(), data.playerStats.size(), data.portalTargets.size());
 
         // Exploration portals

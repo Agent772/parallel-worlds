@@ -6,6 +6,7 @@ import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
 import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Random;
 
@@ -20,6 +21,7 @@ import java.util.Random;
 public final class SeedManager {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Random RANDOM = new Random();
+    private static final DateTimeFormatter LOG_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private SeedManager() {}
 
@@ -35,22 +37,22 @@ public final class SeedManager {
     }
 
     /**
-     * Check whether a seed rotation is due based on the saved reset time.
+     * Check whether a seed rotation is due based on the seed's creation timestamp.
      *
-     * @param lastResetEpochSecond the epoch-second of the last reset (0 if never reset)
-     * @return true if the current time is past the next scheduled reset
+     * @param seedCreatedAt the epoch-second when this seed was generated (0 = unknown/never)
+     * @return true if the current time is past the next scheduled reset after that timestamp
      */
-    public static boolean isRotationDue(long lastResetEpochSecond) {
+    public static boolean isRotationDue(long seedCreatedAt) {
         if (!PWConfig.isSeedRotationEnabled()) {
             return false;
         }
-        if (lastResetEpochSecond <= 0) {
-            // Never rotated yet — rotation is due (first run)
+        if (seedCreatedAt <= 0) {
+            // Unknown creation time — treat as needing rotation so a fresh timestamp is assigned.
             return true;
         }
-        LocalDateTime lastReset = LocalDateTime.ofInstant(
-                Instant.ofEpochSecond(lastResetEpochSecond), ZoneId.systemDefault());
-        LocalDateTime nextReset = computeNextResetAfter(lastReset);
+        LocalDateTime createdAt = LocalDateTime.ofInstant(
+                Instant.ofEpochSecond(seedCreatedAt), ZoneId.systemDefault());
+        LocalDateTime nextReset = computeNextResetAfter(createdAt);
         return LocalDateTime.now().isAfter(nextReset);
     }
 
@@ -63,13 +65,26 @@ public final class SeedManager {
 
         return switch (PWConfig.getResetSchedule()) {
             case DAILY -> {
-                LocalDateTime candidate = after.toLocalDate().plusDays(1).atTime(hour, minute);
-                yield candidate;
+                // Next occurrence of resetHour:resetMinute strictly after 'after'.
+                LocalDateTime sameDayCandidate = after.toLocalDate().atTime(hour, minute);
+                // If that time is still in the future relative to 'after', use same day;
+                // otherwise use the next day.
+                yield sameDayCandidate.isAfter(after)
+                        ? sameDayCandidate
+                        : sameDayCandidate.plusDays(1);
             }
             case WEEKLY -> {
                 DayOfWeek resetDay = toDayOfWeek(PWConfig.getResetDayOfWeek());
-                LocalDate nextDay = after.toLocalDate().with(TemporalAdjusters.next(resetDay));
-                yield nextDay.atTime(hour, minute);
+                // Use nextOrSame so that if today IS the reset day and the time hasn't
+                // passed yet relative to 'after', we use today rather than skipping a week.
+                LocalDate nextDay = after.toLocalDate().with(TemporalAdjusters.nextOrSame(resetDay));
+                LocalDateTime candidate = nextDay.atTime(hour, minute);
+                // If that lands at or before 'after' (same day but time already passed),
+                // advance by one week.
+                if (!candidate.isAfter(after)) {
+                    candidate = candidate.plusWeeks(1);
+                }
+                yield candidate;
             }
             case MONTHLY -> {
                 int dayOfMonth = PWConfig.getResetDayOfMonth();
@@ -102,6 +117,28 @@ public final class SeedManager {
      */
     public static long currentEpochSecond() {
         return Instant.now().getEpochSecond();
+    }
+
+    /**
+     * Formats an epoch-second as a local date-time string (e.g. "2026-03-17 14:19").
+     * Returns "never" for values ≤ 0.
+     */
+    public static String formatEpoch(long epochSecond) {
+        if (epochSecond <= 0) return "never";
+        return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSecond), ZoneId.systemDefault())
+                .format(LOG_FMT);
+    }
+
+    /**
+     * Returns a formatted string of when the next rotation is due after the given
+     * seed creation timestamp, or a descriptive message if rotation is disabled.
+     */
+    public static String nextResetFormatted(long seedCreatedAt) {
+        if (!PWConfig.isSeedRotationEnabled()) return "rotation disabled";
+        if (seedCreatedAt <= 0) return "unknown (no timestamp)";
+        LocalDateTime createdAt = LocalDateTime.ofInstant(
+                Instant.ofEpochSecond(seedCreatedAt), ZoneId.systemDefault());
+        return computeNextResetAfter(createdAt).format(LOG_FMT);
     }
 
     static DayOfWeek toDayOfWeek(PWConfigSpec.WeekDay wd) {

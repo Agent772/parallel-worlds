@@ -40,8 +40,9 @@ public final class DimensionFactory {
             // Resolve DimensionType from the source dimension (preserves modded types)
             Holder<DimensionType> dimTypeHolder = resolveSourceDimensionType(server, baseDimensionLocation);
 
-            // Get next unique ID
-            long dimensionId = DimensionCounter.getNextDimensionId(baseDimensionLocation);
+            // Allocate a fresh ID: always higher than last-used, with a disk-existence check
+            // as a crash-proof fallback in case the counter file was not saved on previous exit.
+            long dimensionId = DimensionCounter.allocateFreshId(baseDimensionLocation, server);
             ResourceKey<Level> explorationKey = ResourceKey.create(
                     Registries.DIMENSION,
                     ResourceLocation.fromNamespaceAndPath(ParallelWorlds.MOD_ID,

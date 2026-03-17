@@ -9,7 +9,8 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 
-public record DimensionCleanupPayload(List<String> deletedDimensionPaths) implements CustomPacketPayload {
+public record DimensionCleanupPayload(List<String> deletedDimensionPaths,
+                                       List<String> activeDimensionPaths) implements CustomPacketPayload {
 
     public static final Type<DimensionCleanupPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(ParallelWorlds.MOD_ID, "dimension_cleanup"));
@@ -18,6 +19,8 @@ public record DimensionCleanupPayload(List<String> deletedDimensionPaths) implem
             StreamCodec.composite(
                     ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()),
                     DimensionCleanupPayload::deletedDimensionPaths,
+                    ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()),
+                    DimensionCleanupPayload::activeDimensionPaths,
                     DimensionCleanupPayload::new
             );
 

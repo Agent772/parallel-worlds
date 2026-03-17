@@ -63,6 +63,24 @@ public final class TeleportHandler {
         return recallInProgress.contains(playerId);
     }
 
+    // ── Portal bypass: players mid-portal are exempt from travel-to-dim blocking ──
+    private static final java.util.Set<UUID> portalInProgress = ConcurrentHashMap.newKeySet();
+
+    /** Mark a player as currently teleporting through a PW portal. */
+    public static void markPortalInProgress(UUID playerId) {
+        portalInProgress.add(playerId);
+    }
+
+    /** Clear the portal-in-progress flag for a player. */
+    public static void clearPortalInProgress(UUID playerId) {
+        portalInProgress.remove(playerId);
+    }
+
+    /** Returns true while a PW portal teleport is in progress for this player. */
+    public static boolean isPortalInProgress(UUID playerId) {
+        return portalInProgress.contains(playerId);
+    }
+
     // ── Background cleanup ──
     private static final ScheduledExecutorService CLEANUP_EXECUTOR =
             Executors.newSingleThreadScheduledExecutor(r -> {
