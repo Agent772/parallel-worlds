@@ -219,6 +219,6 @@ These require a live server + client and cannot be covered by unit or GameTest a
 - [ ] **Ambient light** — confirm end-type exploration dimension ambient brightness matches expectations under shaders
 
 ### General Regression
-- [ ] Seed rotation triggers correctly on scheduled day/time after restart
-- [ ] Players in exploration dimension at shutdown are evacuated to their saved return position on next login
+- [x] Seed rotation triggers correctly on scheduled day/time after restart
+- [x] Players in exploration dimension at shutdown are evacuated to their saved return position on next login
 - [ ] Portal cycling color changes visible under shaders and without shaders

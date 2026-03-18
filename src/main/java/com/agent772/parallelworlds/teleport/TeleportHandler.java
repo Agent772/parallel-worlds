@@ -193,6 +193,13 @@ public final class TeleportHandler {
             player.getInventory().clearContent();
         }
 
+        // Pre-load the destination chunk so isSafePosition has terrain data.
+        // Without this, an unloaded chunk causes the safe-position search to fall
+        // through to createEmergencyPlatform, which places the player at Y=64.
+        ChunkPos retCp = new ChunkPos(ret.pos());
+        returnLevel.getChunkSource().addRegionTicket(TicketType.PORTAL, retCp, 3, ret.pos());
+        returnLevel.getChunk(ret.pos().getX() >> 4, ret.pos().getZ() >> 4, ChunkStatus.FULL);
+
         BlockPos safePos = ensureSafePosition(returnLevel, ret.pos());
 
         clearDangerousEffects(player);

@@ -1,15 +1,13 @@
 package com.agent772.parallelworlds.dimension;
 
+import com.agent772.parallelworlds.teleport.TeleportHandler;
 import com.mojang.logging.LogUtils;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
 
@@ -73,6 +71,8 @@ public class DimensionManager {
 
     /**
      * Move all players out of exploration dimensions — called on shutdown.
+     * Uses the saved return position (where the player entered from) so they
+     * land at their exact pre-exploration location rather than world spawn.
      */
     public void evacuateAllPlayers() {
         LOGGER.info("Evacuating all players from exploration dimensions");
@@ -80,22 +80,16 @@ public class DimensionManager {
 
         for (ServerPlayer player : toEvac) {
             try {
-                ServerLevel overworld = server.overworld();
-                BlockPos spawn = player.getRespawnPosition();
-                if (spawn == null) {
-                    spawn = overworld.getSharedSpawnPos();
+                // Prefer the player's set respawn point (bed / respawn anchor) — it is the most
+                // "home-like" location. forceReturnToSpawn checks getRespawnPosition() first and
+                // falls through to world spawn only if none is set.
+                // If the player has no respawn point, use returnFromExploration which goes back to
+                // wherever they entered the exploration dimension from.
+                if (player.getRespawnPosition() != null) {
+                    TeleportHandler.forceReturnToSpawn(player);
+                } else {
+                    TeleportHandler.returnFromExploration(player);
                 }
-                // Find safe Y
-                while (spawn.getY() > overworld.getMinBuildHeight() && !overworld.getBlockState(spawn.below()).isSolid()) {
-                    spawn = spawn.below();
-                }
-                while (spawn.getY() < overworld.getMaxBuildHeight() && overworld.getBlockState(spawn).isSolid()) {
-                    spawn = spawn.above();
-                }
-                player.teleportTo(overworld,
-                        spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, 0, 0);
-                player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 100, 4));
-                player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 200, 0));
                 LOGGER.info("Evacuated {}", player.getName().getString());
             } catch (Exception e) {
                 LOGGER.error("Failed to evacuate {}", player.getName().getString(), e);
