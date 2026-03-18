@@ -285,7 +285,7 @@ curseforge {
                     }
                     
                     relations {
-                        requiredDependency(project.findProperty('curseforge_create_mod_slug') ?: 'create')
+                        // requiredDependency(project.findProperty('curseforge_create_mod_slug') ?: 'create')
                     }
                 }
             }
