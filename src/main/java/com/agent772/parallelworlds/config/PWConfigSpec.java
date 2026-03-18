@@ -80,6 +80,7 @@ public final class PWConfigSpec {
     // Commands
     public static final ModConfigSpec.BooleanValue COMMAND_TP_ENABLED;
     public static final ModConfigSpec.BooleanValue COMMAND_RETURN_ENABLED;
+    public static final ModConfigSpec.IntValue RECOVERY_AUTO_UNLOAD_DELAY_SEC;
 
     // Teleport blocking
     public static final ModConfigSpec.BooleanValue BLOCK_VANILLA_TP_INTO;
@@ -391,6 +392,11 @@ public final class PWConfigSpec {
         COMMAND_RETURN_ENABLED = builder
                 .comment("", "Allow players to use /pw return to return from exploration dimensions")
                 .define("commandReturnEnabled", false);
+        RECOVERY_AUTO_UNLOAD_DELAY_SEC = builder
+                .comment("",
+                         "Seconds to wait after a recovery dimension becomes empty before auto-unloading it.",
+                         "Set to 0 to unload immediately. Entering the recovery dim during the delay cancels the unload.")
+                .defineInRange("recoveryAutoUnloadDelaySec", 30, 0, 3600);
         builder.pop();
 
         SPEC = builder.build();

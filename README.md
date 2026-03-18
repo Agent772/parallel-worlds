@@ -13,6 +13,7 @@
 Parallel Worlds adds isolated **exploration dimensions** for mining and looting so your main world never gets strip-mined. Pick a destination through the portal, dig everything up, and come back — the dimension resets on schedule and a fresh one waits next restart.
 
 Dimensions are cloned directly from your server's world generator, so modded biomes and structures work out of the box.
+This you can use to provide new Worlds for adventures, without mixing and destroying your main world.
 
 ---
 

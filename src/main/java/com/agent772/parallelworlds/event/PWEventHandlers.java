@@ -7,6 +7,7 @@ import com.agent772.parallelworlds.data.ReturnPosition;
 import com.agent772.parallelworlds.dimension.DimensionManager;
 import com.agent772.parallelworlds.dimension.DimensionRegistrar;
 import com.agent772.parallelworlds.dimension.DimensionUtils;
+import com.agent772.parallelworlds.dimension.RecoveryDimensionManager;
 import com.agent772.parallelworlds.dimension.SeedManager;
 import com.agent772.parallelworlds.generation.async.AsyncChunkHint;
 import com.agent772.parallelworlds.item.DeathRecallItem;
@@ -145,13 +146,16 @@ public final class PWEventHandlers {
     public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         try {
-            ResourceLocation from = event.getFrom().location();
-            ResourceLocation to = event.getTo().location();
+            net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> fromKey = event.getFrom();
+            net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> toKey = event.getTo();
+            ResourceLocation from = fromKey.location();
+            ResourceLocation to = toKey.location();
             boolean leftExploration = DimensionUtils.isExplorationDimension(from);
             boolean enteredExploration = DimensionUtils.isExplorationDimension(to);
 
             PWSavedData savedData = PWSavedData.get(player.server);
             DimensionManager mgr = getDimensionManager();
+            RecoveryDimensionManager recoveryMgr = RecoveryDimensionManager.getInstance();
 
             // Leaving exploration dimension
             if (leftExploration) {
@@ -159,7 +163,8 @@ public final class PWEventHandlers {
                 stats.endVisit();
                 savedData.setDirty();
 
-                if (mgr != null) {
+                // Skip DimensionManager tracking for recovery dims
+                if (mgr != null && !recoveryMgr.isRecoveryDimension(fromKey)) {
                     mgr.onPlayerLeave(player);
                 }
 
@@ -177,17 +182,74 @@ public final class PWEventHandlers {
                 stats.startVisit();
                 savedData.setDirty();
 
-                if (mgr != null) {
+                // Skip DimensionManager tracking for recovery dims
+                if (mgr != null && !recoveryMgr.isRecoveryDimension(toKey)) {
                     mgr.onPlayerEnter(player, to);
                 }
 
-                // Show seed rotation info if enabled
-                Duration timeUntilReset = SeedManager.getTimeUntilNextReset();
-                if (timeUntilReset != null) {
-                    String timeStr = formatDuration(timeUntilReset);
+                // Show seed rotation info if enabled (skip for recovery dims)
+                if (!recoveryMgr.isRecoveryDimension(toKey)) {
+                    Duration timeUntilReset = SeedManager.getTimeUntilNextReset();
+                    if (timeUntilReset != null) {
+                        String timeStr = formatDuration(timeUntilReset);
+                        player.displayClientMessage(
+                                Component.translatable("parallelworlds.command.seed_resets_in", timeStr)
+                                        .withStyle(ChatFormatting.AQUA), false);
+                    }
+                }
+            }
+
+            // Leaving exploration dimension
+            if (leftExploration) {
+                PlayerExplorationStats stats = savedData.getOrCreatePlayerStats(player.getUUID());
+                stats.endVisit();
+                savedData.setDirty();
+
+                // Skip DimensionManager tracking for recovery dims (they are not in
+                // the normal exploration dim set and mgr.onPlayerLeave is harmless but
+                // recovery dims should stay out of the normal active tracking).
+                if (mgr != null && !RecoveryDimensionManager.getInstance()
+                        .isRecoveryDimension(net.minecraft.resources.ResourceKey.create(
+                                net.minecraft.core.registries.Registries.DIMENSION,
+                                net.minecraft.resources.ResourceLocation.parse(from.toString())))) {
+                    mgr.onPlayerLeave(player);
+                }
+
+                if (!enteredExploration) {
                     player.displayClientMessage(
-                            Component.translatable("parallelworlds.command.seed_resets_in", timeStr)
-                                    .withStyle(ChatFormatting.AQUA), false);
+                            Component.translatable("parallelworlds.event.returned_from_exploration")
+                                    .withStyle(ChatFormatting.GREEN), false);
+                }
+            }
+
+            // Entering exploration dimension
+            if (enteredExploration) {
+                PlayerExplorationStats stats = savedData.getOrCreatePlayerStats(player.getUUID());
+                stats.recordVisit(to);
+                stats.startVisit();
+                savedData.setDirty();
+
+                // Skip DimensionManager tracking for recovery dims
+                if (mgr != null && !RecoveryDimensionManager.getInstance()
+                        .isRecoveryDimension(net.minecraft.resources.ResourceKey.create(
+                                net.minecraft.core.registries.Registries.DIMENSION,
+                                net.minecraft.resources.ResourceLocation.parse(to.toString())))) {
+                    mgr.onPlayerEnter(player, to);
+                }
+
+                // Show seed rotation info if enabled (skip for recovery dims)
+                boolean inRecovery = RecoveryDimensionManager.getInstance()
+                        .isRecoveryDimension(net.minecraft.resources.ResourceKey.create(
+                                net.minecraft.core.registries.Registries.DIMENSION,
+                                net.minecraft.resources.ResourceLocation.parse(to.toString())));
+                if (!inRecovery) {
+                    Duration timeUntilReset = SeedManager.getTimeUntilNextReset();
+                    if (timeUntilReset != null) {
+                        String timeStr = formatDuration(timeUntilReset);
+                        player.displayClientMessage(
+                                Component.translatable("parallelworlds.command.seed_resets_in", timeStr)
+                                        .withStyle(ChatFormatting.AQUA), false);
+                    }
                 }
             }
         } catch (Exception e) {

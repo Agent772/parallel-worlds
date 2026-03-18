@@ -6,6 +6,7 @@ import com.agent772.parallelworlds.config.PWClientConfigSpec;
 import com.agent772.parallelworlds.config.PWConfig;
 import com.agent772.parallelworlds.config.PWConfigSpec;
 import com.agent772.parallelworlds.dimension.*;
+import com.agent772.parallelworlds.dimension.RecoveryDimensionManager;
 import com.agent772.parallelworlds.event.PWEventHandlers;
 import com.agent772.parallelworlds.generation.ChunkPreGenerator;
 import com.agent772.parallelworlds.generation.async.AsyncChunkHint;
@@ -133,6 +134,9 @@ public class ParallelWorlds {
         // Create exploration dimensions (uses PWSavedData for seed persistence)
         DimensionRegistrar.initialize();
         DimensionRegistrar.getInstance().createDimensionsOnServerStart(server);
+
+        // Initialize recovery dimension manager (must come after DimensionRegistrar)
+        RecoveryDimensionManager.initialize();
         // Eagerly flush the exploration dimension key mappings so a crash before the
         // first auto-save cannot lose them.  Seeds are already on disk via SeedStore.
         DimensionCounter.saveIfDirty();
@@ -204,6 +208,9 @@ public class ParallelWorlds {
         if (chunkManager != null) {
             chunkManager.performCleanup(server);
         }
+
+        // Auto-unload empty recovery dimensions
+        RecoveryDimensionManager.getInstance().tick(server);
     }
 
     private void onServerStopping(final ServerStoppingEvent event) {
@@ -223,6 +230,16 @@ public class ParallelWorlds {
 
         chunkManager = null;
 
+        // Unload all recovery dimensions cleanly before server shutdown
+        var recoveryMgr = RecoveryDimensionManager.getInstance();
+        for (var key : new java.util.ArrayList<>(recoveryMgr.getRecoveryKeys())) {
+            try {
+                recoveryMgr.unloadRecovery(event.getServer(), key);
+            } catch (Exception e) {
+                LOGGER.error("Error unloading recovery dimension {} during server stop", key.location(), e);
+            }
+        }
+
         // Evacuate players from exploration dimensions
         if (dimensionManager != null) {
             dimensionManager.evacuateAllPlayers();
@@ -239,6 +256,7 @@ public class ParallelWorlds {
 
         // Clear all runtime state
         DimensionRegistrar.cleanupOnShutdown();
+        RecoveryDimensionManager.cleanupOnShutdown();
         SeedStore.clearAll();
         ExplorationSeedManager.clearAll();
         TeleportHandler.clearAll();

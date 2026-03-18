@@ -5,6 +5,7 @@ import com.agent772.parallelworlds.data.DimensionMetadata;
 import com.agent772.parallelworlds.data.PWSavedData;
 import com.agent772.parallelworlds.dimension.DimensionRegistrar;
 import com.agent772.parallelworlds.dimension.DimensionUtils;
+import com.agent772.parallelworlds.dimension.RecoveryDimensionManager;
 import com.agent772.parallelworlds.dimension.SeedManager;
 import com.agent772.parallelworlds.teleport.TeleportHandler;
 import com.mojang.brigadier.CommandDispatcher;
@@ -208,6 +209,13 @@ public final class PWCommands {
         }
 
         if (targetLevel == null) {
+            source.sendFailure(Component.translatable("parallelworlds.command.tp.unknown_dim", dimStr)
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+
+        // Explicitly block attempts to /pw tp into a recovery dimension
+        if (RecoveryDimensionManager.getInstance().isRecoveryDimension(targetLevel.dimension())) {
             source.sendFailure(Component.translatable("parallelworlds.command.tp.unknown_dim", dimStr)
                     .withStyle(ChatFormatting.RED));
             return 0;

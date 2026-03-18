@@ -79,6 +79,7 @@ public final class PWConfig {
     // Commands
     private static boolean commandTpEnabled;
     private static boolean commandReturnEnabled;
+    private static int recoveryAutoUnloadDelaySec;
 
     // Teleport blocking
     private static boolean blockVanillaTeleportInto;
@@ -157,6 +158,7 @@ public final class PWConfig {
 
         commandTpEnabled = PWConfigSpec.COMMAND_TP_ENABLED.get();
         commandReturnEnabled = PWConfigSpec.COMMAND_RETURN_ENABLED.get();
+        recoveryAutoUnloadDelaySec = PWConfigSpec.RECOVERY_AUTO_UNLOAD_DELAY_SEC.get();
 
         blockVanillaTeleportInto = PWConfigSpec.BLOCK_VANILLA_TP_INTO.get();
         blockVanillaTeleportInside = PWConfigSpec.BLOCK_VANILLA_TP_INSIDE.get();
@@ -254,6 +256,7 @@ public final class PWConfig {
 
     public static boolean isCommandTpEnabled() { return commandTpEnabled; }
     public static boolean isCommandReturnEnabled() { return commandReturnEnabled; }
+    public static int getRecoveryAutoUnloadDelaySec() { return recoveryAutoUnloadDelaySec; }
 
     public static boolean isBlockVanillaTeleportInto() { return blockVanillaTeleportInto; }
     public static boolean isBlockVanillaTeleportInside() { return blockVanillaTeleportInside; }

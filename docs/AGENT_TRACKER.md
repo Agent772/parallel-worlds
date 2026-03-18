@@ -31,7 +31,7 @@
 | 13 | Modded World Gen Compatibility | ✅ DONE | Epic 2 | Clone source ChunkGenerator + DimensionType instead of vanilla presets |
 | 14 | Third-Party Mod Data Cleanup | 🔨 IN PROGRESS | Epic 2, 10 | Cleanup cached data from Xaero's Map/Minimap, JourneyMap, Distant Horizons on dimension regeneration |
 | 15 | Async Chunk Generation | ✅ DONE | Epic 7, 2, 11 | Worker threads for noise computation; async pre-gen + player movement hints |
-| 16 | Admin Dimension Recovery Command | 🔲 NOT STARTED | Epic 2, 3, 8 | Load inactive on-disk dims in recovery mode; admin-only access; auto-unload when empty |
+| 16 | Admin Dimension Recovery Command | ✅ DONE | Epic 2, 3, 8 | Load inactive on-disk dims in recovery mode; admin-only access; auto-unload when empty |
 
 ---
 
@@ -174,19 +174,20 @@ Files created/modified per epic. Agents should check this before starting work.
 - [x] Modify: `src/main/resources/parallelworlds.mixins.json` — added MixinNoiseBasedChunkGenerator, IStructureManagerAccessor
 - Note: Uses mixin on NoiseBasedChunkGenerator.fillFromNoise to inject pre-computed noise. Off-thread workers use BeardifierMarker (no structures) for safe parallel computation. ProtoChunk sections copied block-by-block on main thread.
 
-### Epic 16 — Admin Dimension Recovery Command 🔲
-- [ ] `src/main/java/com/agent772/parallelworlds/dimension/RecoveryScanner.java` — scan disk for inactive dim folders
-- [ ] `src/main/java/com/agent772/parallelworlds/dimension/RecoveryDimensionManager.java` — load/unload/auto-unload recovery dims
-- [ ] Modify: `src/main/java/com/agent772/parallelworlds/command/PWAdminCommands.java` — add `recovery` sub-command tree
-- [ ] Modify: `src/main/java/com/agent772/parallelworlds/command/PWCommands.java` — add recovery exclusion guard to `/pw tp` and `/pw list`
-- [ ] Modify: `src/main/java/com/agent772/parallelworlds/portal/PortalTargetManager.java` — skip recovery dims in cycling
-- [ ] Modify: `src/main/java/com/agent772/parallelworlds/event/PWEventHandlers.java` — skip recovery dims in network sync; add tick hook for auto-unload
-- [ ] Modify: `src/main/java/com/agent772/parallelworlds/network/PWNetworking.java` — exclude recovery dims from sync payloads
-- [ ] Modify: `src/main/java/com/agent772/parallelworlds/config/PWConfigSpec.java` — add `recoveryAutoUnloadDelaySec`
-- [ ] Modify: `src/main/java/com/agent772/parallelworlds/config/PWConfig.java` — add getter
-- [ ] Modify: `src/main/java/com/agent772/parallelworlds/ParallelWorlds.java` — init RecoveryDimensionManager, register tick handler
-- [ ] Modify: `src/main/resources/assets/parallelworlds/lang/en_us.json` — translation keys for recovery commands
-- Note: All recovery state is transient — no persistence across restarts. Recovery dims must be re-loaded manually. DimensionCleanup must skip folders loaded as recovery dims.
+### Epic 16 — Admin Dimension Recovery Command ✅
+- [x] `src/main/java/com/agent772/parallelworlds/dimension/RecoveryScanner.java` — scan disk for inactive dim folders
+- [x] `src/main/java/com/agent772/parallelworlds/dimension/RecoveryDimensionManager.java` — load/unload/auto-unload recovery dims
+- [x] Modify: `src/main/java/com/agent772/parallelworlds/command/PWAdminCommands.java` — added `recovery` sub-command tree (list/load/tp/unload/status)
+- [x] Modify: `src/main/java/com/agent772/parallelworlds/command/PWCommands.java` — added recovery exclusion guard to `/pw tp`
+- [x] Modify: `src/main/java/com/agent772/parallelworlds/portal/PortalTargetManager.java` — no code change needed; recovery dims excluded by design (not in DimensionRegistrar)
+- [x] Modify: `src/main/java/com/agent772/parallelworlds/event/PWEventHandlers.java` — skip recovery dims in player enter/leave tracking and seed-reset message
+- [x] Modify: `src/main/java/com/agent772/parallelworlds/network/PWNetworking.java` — no code change needed; recovery dims excluded by design (not in DimensionRegistrar sync)
+- [x] Modify: `src/main/java/com/agent772/parallelworlds/config/PWConfigSpec.java` — added `recoveryAutoUnloadDelaySec` (default 30s, range 0–3600)
+- [x] Modify: `src/main/java/com/agent772/parallelworlds/config/PWConfig.java` — added field, refresh(), and getter
+- [x] Modify: `src/main/java/com/agent772/parallelworlds/ParallelWorlds.java` — wired RecoveryDimensionManager init/tick/stop/shutdown
+- [x] Modify: `src/main/resources/assets/parallelworlds/lang/en_us.json` — 18 translation keys for recovery commands
+- [x] Modify: `src/main/java/com/agent772/parallelworlds/dimension/DimensionCleanup.java` — skip folders currently loaded as recovery dims
+- Note: All recovery state is transient (no persistence across restarts). Portal cycling, network sync, and `/pw list` naturally exclude recovery dims since they are not added to DimensionRegistrar. DimensionCleanup skips active recovery folders.
 
 ---
 

@@ -97,5 +97,23 @@
   "parallelworlds.recall.tooltip.single_use": "⚠ One-time use",
   "parallelworlds.recall.tooltip.target": "Target: %s",
   "parallelworlds.recall.tooltip.charge": "⚡ Stand still during activation",
-  "parallelworlds.recall.tooltip.expires": "⏳ Expires in: %s"
+  "parallelworlds.recall.tooltip.expires": "⏳ Expires in: %s",
+
+  "parallelworlds.admin.recovery.list.header": "Inactive dimensions on disk:",
+  "parallelworlds.admin.recovery.list.entry": "  %s — last modified %s",
+  "parallelworlds.admin.recovery.list.empty": "No inactive dimensions found on disk.",
+  "parallelworlds.admin.recovery.load.success": "Recovery dimension %s loaded successfully.",
+  "parallelworlds.admin.recovery.load.already_loaded": "Recovery dimension %s is already loaded.",
+  "parallelworlds.admin.recovery.load.already_active": "Dimension %s is currently active (not a recovery candidate).",
+  "parallelworlds.admin.recovery.load.failed": "Failed to load recovery dimension %s.",
+  "parallelworlds.admin.recovery.load.not_found": "No dimension folder found for %s.",
+  "parallelworlds.admin.recovery.tp.success": "Teleported to recovery dimension %s.",
+  "parallelworlds.admin.recovery.tp.not_player": "This command must be run by a player.",
+  "parallelworlds.admin.recovery.unload.success": "Recovery dimension %s unloaded.",
+  "parallelworlds.admin.recovery.unload.not_loaded": "Recovery dimension %s is not currently loaded.",
+  "parallelworlds.admin.recovery.unload.evacuated": "Evacuated %d player(s) from recovery dimension %s.",
+  "parallelworlds.admin.recovery.status.header": "Loaded recovery dimensions:",
+  "parallelworlds.admin.recovery.status.entry": "  %s — %d player(s)",
+  "parallelworlds.admin.recovery.status.none": "No recovery dimensions are currently loaded.",
+  "parallelworlds.admin.recovery.auto_unload": "Recovery dimension %s auto-unloaded (empty for %d seconds)."
 }

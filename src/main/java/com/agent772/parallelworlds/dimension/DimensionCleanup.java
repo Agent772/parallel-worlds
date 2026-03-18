@@ -4,7 +4,11 @@ import com.agent772.parallelworlds.ParallelWorlds;
 import com.agent772.parallelworlds.config.PWConfig;
 import com.agent772.parallelworlds.data.PWSavedData;
 import com.mojang.logging.LogUtils;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 
@@ -71,9 +75,20 @@ public final class DimensionCleanup {
                 int toDelete = folders.size() - retention;
                 for (int i = 0; i < toDelete; i++) {
                     Path folder = folders.get(i);
+                    String folderName = folder.getFileName().toString();
+
+                    // Skip folders currently loaded as recovery dims to prevent data loss
+                    ResourceLocation recoveryId = ResourceLocation.fromNamespaceAndPath(
+                            ParallelWorlds.MOD_ID, folderName);
+                    ResourceKey<Level> recoveryKey = ResourceKey.create(Registries.DIMENSION, recoveryId);
+                    if (RecoveryDimensionManager.getInstance().isRecoveryDimension(recoveryKey)) {
+                        LOGGER.info("Skipping deletion of {} — currently loaded as recovery dimension", folderName);
+                        continue;
+                    }
+
                     LOGGER.info("Deleting old exploration dimension folder: {}", folder);
                     deleteRecursively(folder);
-                    deleted.add(folder.getFileName().toString());
+                    deleted.add(folderName);
                 }
             }
         } catch (IOException e) {
