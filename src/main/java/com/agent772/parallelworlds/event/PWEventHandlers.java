@@ -61,13 +61,24 @@ public final class PWEventHandlers {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         try {
             // If the player is in a dimension that no longer exists, evacuate to spawn
-            if (DimensionUtils.isExplorationDimension(player.level().dimension())) {
+            boolean inExploration = DimensionUtils.isExplorationDimension(player.level().dimension());
+
+            if (inExploration) {
                 var server = player.server;
                 var level = server.getLevel(player.level().dimension());
                 if (level == null) {
-                    LOGGER.warn("Player {} was in deleted exploration dimension — evacuating",
-                            player.getName().getString());
-                    TeleportHandler.forceReturnToSpawn(player);
+                    LOGGER.warn("Player {} was in deleted exploration dimension {} — evacuating",
+                            player.getName().getString(), player.level().dimension().location());
+                    TeleportHandler.evacuatePlayer(player);
+                }
+            } else {
+                // Player is NOT in an exploration dim, but may have logged out inside one before
+                // a server restart. Vanilla would have placed them at world spawn (possibly in water).
+                // Detect this via a stale return position in PWSavedData and evacuate to safety.
+                boolean hasReturnPos = PWSavedData.get(player.server)
+                        .getReturnPosition(player.getUUID()).isPresent();
+                if (hasReturnPos) {
+                    TeleportHandler.evacuatePlayer(player);
                 }
             }
 

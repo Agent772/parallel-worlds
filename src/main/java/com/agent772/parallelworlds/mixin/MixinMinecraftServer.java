@@ -5,6 +5,7 @@ import com.agent772.parallelworlds.accessor.IRegistryAccessor;
 import com.agent772.parallelworlds.accessor.IServerDimensionAccessor;
 import com.agent772.parallelworlds.config.PWConfig;
 import com.agent772.parallelworlds.dimension.ExplorationSeedManager;
+import com.agent772.parallelworlds.teleport.TeleportHandler;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
@@ -25,6 +26,7 @@ import net.minecraft.world.level.storage.DerivedLevelData;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.level.storage.WorldData;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import org.slf4j.Logger;
@@ -153,15 +155,27 @@ public abstract class MixinMinecraftServer implements IServerDimensionAccessor {
         MinecraftServer server = (MinecraftServer) (Object) this;
         ServerLevel overworld = server.overworld();
 
-        // Evacuate players
+        // Evacuate players — use TeleportHandler so the full priority logic applies
+        // (bed → entry position → world-spawn surface via heightmap).
+        // This fallback only runs for players still in the level after evacuateAllPlayers().
+        List<net.minecraft.server.level.ServerPlayer> playersInLevel = new ArrayList<>(level.players());
         if (overworld != null) {
-            new ArrayList<>(level.players()).forEach(player -> {
+            playersInLevel.forEach(player -> {
                 try {
-                    var spawn = overworld.getSharedSpawnPos();
-                    player.teleportTo(overworld,
-                            spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, 0, 0);
+                    TeleportHandler.evacuatePlayer(player);
                 } catch (Exception e) {
                     pw$LOGGER.error("Failed to evacuate {}", player.getName().getString(), e);
+                    // Last resort: surface heightmap to avoid landing inside terrain.
+                    try {
+                        var spawnXZ = overworld.getSharedSpawnPos();
+                        var surface = overworld.getHeightmapPos(
+                                Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, spawnXZ);
+                        player.teleportTo(overworld,
+                                surface.getX() + 0.5, surface.getY(), surface.getZ() + 0.5, 0, 0);
+                    } catch (Exception ex) {
+                        pw$LOGGER.error("Last-resort evacuation also failed for {}",
+                                player.getName().getString(), ex);
+                    }
                 }
             });
         }

@@ -44,6 +44,7 @@
 
   "parallelworlds.event.returned_from_exploration": "Returned from exploration dimension.",
   "parallelworlds.event.respawned_overworld": "Respawned in overworld — beds in exploration dimensions are temporary.",
+  "parallelworlds.event.evacuated_bed": "Dimension reset — returned to your bed.",
 
   "parallelworlds.teleport.success": "Teleported to exploration dimension!",
   "parallelworlds.teleport.failed": "Teleportation failed! Please try again.",

@@ -70,9 +70,9 @@ public class DimensionManager {
     }
 
     /**
-     * Move all players out of exploration dimensions — called on shutdown.
-     * Uses the saved return position (where the player entered from) so they
-     * land at their exact pre-exploration location rather than world spawn.
+     * Move all players out of exploration dimensions — called on shutdown or admin /returnall.
+     * Delegates to {@link TeleportHandler#evacuatePlayer} which applies the full priority logic:
+     * bed → entry position → world-spawn surface.
      */
     public void evacuateAllPlayers() {
         LOGGER.info("Evacuating all players from exploration dimensions");
@@ -80,17 +80,7 @@ public class DimensionManager {
 
         for (ServerPlayer player : toEvac) {
             try {
-                // Prefer the player's set respawn point (bed / respawn anchor) — it is the most
-                // "home-like" location. forceReturnToSpawn checks getRespawnPosition() first and
-                // falls through to world spawn only if none is set.
-                // If the player has no respawn point, use returnFromExploration which goes back to
-                // wherever they entered the exploration dimension from.
-                if (player.getRespawnPosition() != null) {
-                    TeleportHandler.forceReturnToSpawn(player);
-                } else {
-                    TeleportHandler.returnFromExploration(player);
-                }
-                LOGGER.info("Evacuated {}", player.getName().getString());
+                TeleportHandler.evacuatePlayer(player);
             } catch (Exception e) {
                 LOGGER.error("Failed to evacuate {}", player.getName().getString(), e);
             }

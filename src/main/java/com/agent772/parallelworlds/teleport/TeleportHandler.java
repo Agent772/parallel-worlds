@@ -20,11 +20,16 @@ import net.minecraft.server.level.TicketType;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.RespawnAnchorBlock;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.material.Fluids;
@@ -273,31 +278,161 @@ public final class TeleportHandler {
     }
 
     /**
+     * Evacuate a player from an exploration dimension that is about to be reset.
+     * Priority:
+     *   1) Bed / respawn-anchor in a persistent (non-exploration) dimension — respawn as-if
+     *      the player died there, keeping all their items.
+     *   2) Saved entry position from when the player first entered the exploration dimension.
+     *   3) World spawn, located via surface heightmap so the player never lands inside terrain.
+     */
+    public static void evacuatePlayer(ServerPlayer player) {
+        dismountBeforeTeleport(player);
+
+        // ── Step 1: Valid bed/anchor in a persistent (non-exploration) dimension ──
+        BlockPos respawnPos = player.getRespawnPosition();
+        ResourceKey<Level> respawnDim = player.getRespawnDimension();
+
+        if (respawnPos != null && !DimensionUtils.isExplorationDimension(respawnDim)) {
+            ServerLevel respawnLevel = player.server.getLevel(respawnDim);
+            if (respawnLevel != null) {
+                ChunkPos rcp = new ChunkPos(respawnPos);
+                respawnLevel.getChunkSource().addRegionTicket(TicketType.PORTAL, rcp, 3, respawnPos);
+                respawnLevel.getChunk(respawnPos.getX() >> 4, respawnPos.getZ() >> 4, ChunkStatus.FULL);
+
+                Optional<Vec3> bedTarget = tryFindBedStandUp(respawnLevel, respawnPos, player);
+
+                if (bedTarget.isPresent()) {
+                    clearDangerousEffects(player);
+                    DimensionTransition transition = new DimensionTransition(
+                            respawnLevel, bedTarget.get(), Vec3.ZERO,
+                            player.getRespawnAngle(), 0F,
+                            DimensionTransition.DO_NOTHING
+                    );
+                    player.changeDimension(transition);
+                    applyPostTeleportSafety(player);
+                    removeReturnPosition(player);
+                    player.displayClientMessage(
+                            Component.translatable("parallelworlds.event.evacuated_bed")
+                                    .withStyle(ChatFormatting.GREEN), false);
+                    return;
+                }
+            }
+        }
+
+        // ── Step 2: Saved entry/return position ──
+        // Check in-memory cache first, fall back to PWSavedData in case cache is cold.
+        ReturnPosition ret = returnPositions.get(player.getUUID());
+        if (ret == null) {
+            ret = PWSavedData.get(player.server).getReturnPosition(player.getUUID()).orElse(null);
+        }
+
+        if (ret != null && !ret.isExpired()) {
+            ResourceKey<Level> retKey = ResourceKey.create(Registries.DIMENSION, ret.dimension());
+            ServerLevel retLevel = player.server.getLevel(retKey);
+            boolean retIsExploration = DimensionUtils.isExplorationDimension(retKey);
+
+            if (retLevel != null && !retIsExploration) {
+                ChunkPos rcp = new ChunkPos(ret.pos());
+                retLevel.getChunkSource().addRegionTicket(TicketType.PORTAL, rcp, 3, ret.pos());
+                retLevel.getChunk(ret.pos().getX() >> 4, ret.pos().getZ() >> 4, ChunkStatus.FULL);
+
+                BlockPos safePos = ensureSafePosition(retLevel, ret.pos());
+                clearDangerousEffects(player);
+                DimensionTransition transition = new DimensionTransition(
+                        retLevel, Vec3.atBottomCenterOf(safePos), Vec3.ZERO,
+                        ret.yRot(), ret.xRot(),
+                        DimensionTransition.DO_NOTHING
+                );
+                player.changeDimension(transition);
+                applyPostTeleportSafety(player);
+                removeReturnPosition(player);
+                player.displayClientMessage(
+                        Component.translatable("parallelworlds.teleport.returned")
+                                .withStyle(ChatFormatting.GREEN), false);
+                return;
+            }
+        }
+
+        // ── Step 3: World spawn — use surface heightmap to avoid landing inside terrain ──
+        ServerLevel overworld = player.server.overworld();
+        BlockPos spawnCenter = overworld.getSharedSpawnPos();
+
+        ChunkPos scp = new ChunkPos(spawnCenter);
+        overworld.getChunkSource().addRegionTicket(TicketType.PORTAL, scp, 3, spawnCenter);
+        overworld.getChunk(spawnCenter.getX() >> 4, spawnCenter.getZ() >> 4, ChunkStatus.FULL);
+
+        BlockPos surfacePos = overworld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, spawnCenter);
+        BlockPos safePos = ensureSafePosition(overworld, surfacePos);
+
+        clearDangerousEffects(player);
+        DimensionTransition transition = new DimensionTransition(
+                overworld, Vec3.atBottomCenterOf(safePos), Vec3.ZERO,
+                player.getYRot(), player.getXRot(),
+                DimensionTransition.DO_NOTHING
+        );
+        player.changeDimension(transition);
+        applyPostTeleportSafety(player);
+        removeReturnPosition(player);
+        player.displayClientMessage(
+                Component.translatable("parallelworlds.teleport.no_return_pos")
+                        .withStyle(ChatFormatting.YELLOW), false);
+    }
+
+    /**
      * Emergency return to overworld spawn. Used when no saved return exists.
      */
     public static void forceReturnToSpawn(ServerPlayer player) {
         dismountBeforeTeleport(player);
 
         ServerLevel overworld = player.server.overworld();
-        BlockPos safePos;
+        Vec3 target;
 
         // Prefer the player's bed/respawn-anchor position if it's in the overworld
         BlockPos respawn = player.getRespawnPosition();
         ResourceKey<Level> respawnDim = player.getRespawnDimension();
         if (respawn != null && overworld.dimension().equals(respawnDim)) {
-            // Force-load the respawn chunk before searching (same as resolveSpawnPosition)
+            // Pre-load the chunk so the bed/anchor block is readable
             ChunkPos cp = new ChunkPos(respawn);
             overworld.getChunkSource().addRegionTicket(TicketType.PORTAL, cp, 3, respawn);
             overworld.getChunk(respawn.getX() >> 4, respawn.getZ() >> 4, ChunkStatus.FULL);
-            safePos = ensureSafePosition(overworld, respawn);
+
+            // Call BedBlock/RespawnAnchorBlock directly so we fully control the fallback.
+            // findRespawnPositionAndUseSpawnBlock() never returns null — on failure it silently
+            // returns DimensionTransition.missingRespawnBlock() which sends the player to world
+            // spawn potentially inside terrain. We want our own ensureSafePosition fallback.
+            BlockState bs = overworld.getBlockState(respawn);
+            Optional<Vec3> standUp = Optional.empty();
+            if (bs.getBlock() instanceof BedBlock && BedBlock.canSetSpawn(overworld)
+                    && bs.hasProperty(BlockStateProperties.BED_PART)
+                    && bs.getValue(BlockStateProperties.BED_PART) == BedPart.HEAD) {
+                standUp = BedBlock.findStandUpPosition(
+                        EntityType.PLAYER, overworld, respawn,
+                        bs.getValue(BlockStateProperties.HORIZONTAL_FACING),
+                        player.getRespawnAngle());
+            } else if (bs.getBlock() instanceof RespawnAnchorBlock
+                    && RespawnAnchorBlock.canSetSpawn(overworld)) {
+                standUp = RespawnAnchorBlock.findStandUpPosition(
+                        EntityType.PLAYER, overworld, respawn);
+            }
+
+            if (standUp.isPresent()) {
+                target = standUp.get();
+            } else {
+                LOGGER.warn("Bed/anchor at {} not accessible — searching nearby safe position", respawn);
+                target = Vec3.atBottomCenterOf(ensureSafePosition(overworld, respawn));
+            }
         } else {
-            // No valid overworld respawn — use resolveSpawnPosition which handles chunk loading
-            safePos = resolveSpawnPosition(overworld);
+            // No valid overworld respawn — find the surface at world spawn via heightmap
+            // to avoid landing inside terrain (resolveSpawnPosition can platform at Y=64).
+            BlockPos spawnCenter = overworld.getSharedSpawnPos();
+            ChunkPos scp = new ChunkPos(spawnCenter);
+            overworld.getChunkSource().addRegionTicket(TicketType.PORTAL, scp, 3, spawnCenter);
+            overworld.getChunk(spawnCenter.getX() >> 4, spawnCenter.getZ() >> 4, ChunkStatus.FULL);
+            BlockPos surfacePos = overworld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, spawnCenter);
+            target = Vec3.atBottomCenterOf(ensureSafePosition(overworld, surfacePos));
         }
 
         clearDangerousEffects(player);
-
-        Vec3 target = Vec3.atBottomCenterOf(safePos);
         DimensionTransition transition = new DimensionTransition(
                 overworld, target, Vec3.ZERO,
                 player.getYRot(), player.getXRot(),
@@ -316,6 +451,27 @@ public final class TeleportHandler {
     // ═══════════════════════════════════════════════════════════════
     //  Return-position queries (for future use by commands / events)
     // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Try to find a stand-up position next to a bed or respawn anchor.
+     * Returns empty if the block is gone, obstructed, or in the wrong dim for spawning.
+     */
+    private static Optional<Vec3> tryFindBedStandUp(ServerLevel level, BlockPos respawnPos,
+                                                     ServerPlayer player) {
+        BlockState bs = level.getBlockState(respawnPos);
+        if (bs.getBlock() instanceof BedBlock && BedBlock.canSetSpawn(level)
+                && bs.hasProperty(BlockStateProperties.BED_PART)
+                && bs.getValue(BlockStateProperties.BED_PART) == BedPart.HEAD) {
+            return BedBlock.findStandUpPosition(
+                    EntityType.PLAYER, level, respawnPos,
+                    bs.getValue(BlockStateProperties.HORIZONTAL_FACING),
+                    player.getRespawnAngle());
+        } else if (bs.getBlock() instanceof RespawnAnchorBlock
+                && RespawnAnchorBlock.canSetSpawn(level)) {
+            return RespawnAnchorBlock.findStandUpPosition(EntityType.PLAYER, level, respawnPos);
+        }
+        return Optional.empty();
+    }
 
     /**
      * Load persisted return positions from PWSavedData into the in-memory cache.
@@ -463,12 +619,17 @@ public final class TeleportHandler {
      * Ensure the given pos is safe; search nearby or platform if not.
      */
     private static BlockPos ensureSafePosition(ServerLevel level, BlockPos pos) {
-        if (isSafePosition(level, pos)) return pos;
+        if (isSafePosition(level, pos)) {
+            return pos;
+        }
 
         BlockPos safe = findSafePosition(level, pos);
-        if (safe != null) return safe;
+        if (safe != null) {
+            return safe;
+        }
 
-        LOGGER.warn("Position {} unsafe — creating emergency platform", pos);
+        LOGGER.warn("No safe position near {} in {} — creating emergency platform",
+                pos, level.dimension().location());
         return createEmergencyPlatform(level, pos);
     }
 
