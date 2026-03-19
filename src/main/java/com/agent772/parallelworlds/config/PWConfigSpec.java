@@ -94,7 +94,7 @@ public final class PWConfigSpec {
     public static final ModConfigSpec.IntValue DEATH_RECALL_COOLDOWN_SECONDS;
     public static final ModConfigSpec.IntValue DEATH_RECALL_EXPIRE_SECONDS;
 
-    public enum ResetSchedule { DAILY, WEEKLY, MONTHLY }
+    public enum ResetSchedule { DAILY, WEEKLY, MONTHLY, ON_RESTART }
     public enum WeekDay { MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY }
     public enum RestrictionMode { BLOCK, WARN, ALLOW }
     public enum PersistenceMode { PERSIST_UNTIL_ROTATION, REGENERATE_EACH_RESTART }
@@ -127,8 +127,9 @@ public final class PWConfigSpec {
                 .define("seedRotationEnabled", true);
         RESET_SCHEDULE = builder
                 .comment("",
-                         "How often to rotate seeds: DAILY, WEEKLY, MONTHLY. Only applies if seedRotationEnabled=true.",
-                         "Rotation takes effect on the next server restart after the scheduled time.")
+                         "How often to rotate seeds: DAILY, WEEKLY, MONTHLY, ON_RESTART. Only applies if seedRotationEnabled=true.",
+                         "ON_RESTART: rotate the seed on every server restart regardless of time.",
+                         "DAILY/WEEKLY/MONTHLY: rotation takes effect on the next server restart after the scheduled time.")
                 .defineEnum("resetSchedule", ResetSchedule.WEEKLY);
         RESET_DAY_OF_WEEK = builder
                 .comment("", "Day of week for WEEKLY rotation (ignored for DAILY/MONTHLY)")

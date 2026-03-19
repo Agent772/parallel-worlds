@@ -71,6 +71,23 @@ public final class PWEventHandlers {
                     LOGGER.warn("Player {} was in deleted exploration dimension {} — evacuating",
                             player.getName().getString(), player.level().dimension().location());
                     TeleportHandler.evacuatePlayer(player);
+                } else {
+                    player.displayClientMessage(
+                            Component.translatable("parallelworlds.event.logged_in_exploration")
+                                    .withStyle(ChatFormatting.AQUA), false);
+                    if (SeedManager.isOnRestartSchedule()) {
+                        player.displayClientMessage(
+                                Component.translatable("parallelworlds.command.seed_resets_on_restart")
+                                        .withStyle(ChatFormatting.AQUA), false);
+                    } else {
+                        Duration timeUntilReset = SeedManager.getTimeUntilNextReset();
+                        if (timeUntilReset != null) {
+                            String timeStr = formatDuration(timeUntilReset);
+                            player.displayClientMessage(
+                                    Component.translatable("parallelworlds.command.seed_resets_in", timeStr)
+                                            .withStyle(ChatFormatting.AQUA), false);
+                        }
+                    }
                 }
             } else {
                 // Player is NOT in an exploration dim, but may have logged out inside one before
@@ -189,69 +206,22 @@ public final class PWEventHandlers {
 
                 // Show seed rotation info if enabled (skip for recovery dims)
                 if (!recoveryMgr.isRecoveryDimension(toKey)) {
-                    Duration timeUntilReset = SeedManager.getTimeUntilNextReset();
-                    if (timeUntilReset != null) {
-                        String timeStr = formatDuration(timeUntilReset);
+                    if (SeedManager.isOnRestartSchedule()) {
                         player.displayClientMessage(
-                                Component.translatable("parallelworlds.command.seed_resets_in", timeStr)
+                                Component.translatable("parallelworlds.command.seed_resets_on_restart")
                                         .withStyle(ChatFormatting.AQUA), false);
+                    } else {
+                        Duration timeUntilReset = SeedManager.getTimeUntilNextReset();
+                        if (timeUntilReset != null) {
+                            String timeStr = formatDuration(timeUntilReset);
+                            player.displayClientMessage(
+                                    Component.translatable("parallelworlds.command.seed_resets_in", timeStr)
+                                            .withStyle(ChatFormatting.AQUA), false);
+                        }
                     }
                 }
             }
 
-            // Leaving exploration dimension
-            if (leftExploration) {
-                PlayerExplorationStats stats = savedData.getOrCreatePlayerStats(player.getUUID());
-                stats.endVisit();
-                savedData.setDirty();
-
-                // Skip DimensionManager tracking for recovery dims (they are not in
-                // the normal exploration dim set and mgr.onPlayerLeave is harmless but
-                // recovery dims should stay out of the normal active tracking).
-                if (mgr != null && !RecoveryDimensionManager.getInstance()
-                        .isRecoveryDimension(net.minecraft.resources.ResourceKey.create(
-                                net.minecraft.core.registries.Registries.DIMENSION,
-                                net.minecraft.resources.ResourceLocation.parse(from.toString())))) {
-                    mgr.onPlayerLeave(player);
-                }
-
-                if (!enteredExploration) {
-                    player.displayClientMessage(
-                            Component.translatable("parallelworlds.event.returned_from_exploration")
-                                    .withStyle(ChatFormatting.GREEN), false);
-                }
-            }
-
-            // Entering exploration dimension
-            if (enteredExploration) {
-                PlayerExplorationStats stats = savedData.getOrCreatePlayerStats(player.getUUID());
-                stats.recordVisit(to);
-                stats.startVisit();
-                savedData.setDirty();
-
-                // Skip DimensionManager tracking for recovery dims
-                if (mgr != null && !RecoveryDimensionManager.getInstance()
-                        .isRecoveryDimension(net.minecraft.resources.ResourceKey.create(
-                                net.minecraft.core.registries.Registries.DIMENSION,
-                                net.minecraft.resources.ResourceLocation.parse(to.toString())))) {
-                    mgr.onPlayerEnter(player, to);
-                }
-
-                // Show seed rotation info if enabled (skip for recovery dims)
-                boolean inRecovery = RecoveryDimensionManager.getInstance()
-                        .isRecoveryDimension(net.minecraft.resources.ResourceKey.create(
-                                net.minecraft.core.registries.Registries.DIMENSION,
-                                net.minecraft.resources.ResourceLocation.parse(to.toString())));
-                if (!inRecovery) {
-                    Duration timeUntilReset = SeedManager.getTimeUntilNextReset();
-                    if (timeUntilReset != null) {
-                        String timeStr = formatDuration(timeUntilReset);
-                        player.displayClientMessage(
-                                Component.translatable("parallelworlds.command.seed_resets_in", timeStr)
-                                        .withStyle(ChatFormatting.AQUA), false);
-                    }
-                }
-            }
         } catch (Exception e) {
             LOGGER.error("Error handling dimension change for {}", event.getEntity().getName().getString(), e);
         }

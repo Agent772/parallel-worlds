@@ -2,11 +2,14 @@ package com.agent772.parallelworlds.network;
 
 import com.agent772.parallelworlds.client.ModDataCleanupHandler;
 import com.agent772.parallelworlds.client.PWClientHandler;
+import com.agent772.parallelworlds.compat.journeymap.JourneyMapPortalWaypointHandler;
+import com.agent772.parallelworlds.compat.xaero.XaeroPortalWaypointHandler;
 import com.agent772.parallelworlds.dimension.DimensionRegistrar;
 import com.agent772.parallelworlds.network.payload.DimensionCleanupPayload;
 import com.agent772.parallelworlds.network.payload.DimensionResetPayload;
 import com.agent772.parallelworlds.network.payload.DimensionSyncPayload;
 import com.agent772.parallelworlds.network.payload.ResetWarningPayload;
+import com.agent772.parallelworlds.network.payload.WaypointSyncPayload;
 import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -53,6 +56,14 @@ public final class PWNetworking {
                 DimensionCleanupPayload.STREAM_CODEC,
                 ModDataCleanupHandler::onDimensionCleanupReceived
         );
+        registrar.playToClient(
+                WaypointSyncPayload.TYPE,
+                WaypointSyncPayload.STREAM_CODEC,
+                (payload, ctx) -> {
+                    XaeroPortalWaypointHandler.handleWaypointSync(payload, ctx);
+                    JourneyMapPortalWaypointHandler.handleWaypointSync(payload, ctx);
+                }
+        );
 
         LOGGER.info("Parallel Worlds network payloads registered");
     }
@@ -96,5 +107,15 @@ public final class PWNetworking {
 
     public static void sendDimensionCleanup(ServerPlayer player, List<String> deletedPaths, List<String> activePaths) {
         PacketDistributor.sendToPlayer(player, new DimensionCleanupPayload(deletedPaths, activePaths));
+    }
+
+    /**
+     * Tell a specific client to add ({@code add=true}) or remove ({@code add=false})
+     * a portal waypoint for the given exploration dimension.
+     * x/y/z are only meaningful when adding.
+     */
+    public static void sendWaypointSync(ServerPlayer player, ResourceLocation dimId,
+                                        int x, int y, int z, boolean add) {
+        PacketDistributor.sendToPlayer(player, new WaypointSyncPayload(dimId, x, y, z, add));
     }
 }

@@ -1,5 +1,7 @@
 package com.agent772.parallelworlds.client;
 
+import com.agent772.parallelworlds.compat.journeymap.JourneyMapPortalWaypointHandler;
+import com.agent772.parallelworlds.compat.xaero.XaeroPortalWaypointHandler;
 import com.agent772.parallelworlds.network.payload.DimensionResetPayload;
 import com.agent772.parallelworlds.network.payload.DimensionSyncPayload;
 import com.agent772.parallelworlds.network.payload.ResetWarningPayload;
@@ -40,6 +42,10 @@ public final class PWClientHandler {
     public static void handleDimensionReset(DimensionResetPayload data, IPayloadContext context) {
         context.enqueueWork(() -> {
             knownDimensions.remove(data.dimensionId());
+            // Clear any cached waypoint reference for this dimension so we don’t try
+            // to remove it from a stale object after the dim has been recreated
+            XaeroPortalWaypointHandler.clearCacheForDim(data.dimensionId());
+            JourneyMapPortalWaypointHandler.clearCacheForDim(data.dimensionId());
             LocalPlayer player = Minecraft.getInstance().player;
             if (player != null) {
                 player.displayClientMessage(
@@ -83,5 +89,7 @@ public final class PWClientHandler {
      */
     public static void clearAll() {
         knownDimensions.clear();
+        XaeroPortalWaypointHandler.clearCache();
+        JourneyMapPortalWaypointHandler.clearCache();
     }
 }

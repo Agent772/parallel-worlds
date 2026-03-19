@@ -46,6 +46,10 @@ public final class SeedManager {
         if (!PWConfig.isSeedRotationEnabled()) {
             return false;
         }
+        if (PWConfig.getResetSchedule() == PWConfigSpec.ResetSchedule.ON_RESTART) {
+            // Always rotate on every server restart.
+            return true;
+        }
         if (seedCreatedAt <= 0) {
             // Unknown creation time — treat as needing rotation so a fresh timestamp is assigned.
             return true;
@@ -64,6 +68,7 @@ public final class SeedManager {
         int minute = PWConfig.getResetMinute();
 
         return switch (PWConfig.getResetSchedule()) {
+            case ON_RESTART -> LocalDateTime.now(); // already due; caller should not reach here
             case DAILY -> {
                 // Next occurrence of resetHour:resetMinute strictly after 'after'.
                 LocalDateTime sameDayCandidate = after.toLocalDate().atTime(hour, minute);
@@ -101,10 +106,23 @@ public final class SeedManager {
     }
 
     /**
-     * Get the duration until the next seed rotation from now, or null if rotation is disabled.
+     * Returns true when rotation is enabled and the schedule is ON_RESTART.
+     * Use this to show the appropriate "resets on next restart" message instead of a duration.
+     */
+    public static boolean isOnRestartSchedule() {
+        return PWConfig.isSeedRotationEnabled()
+                && PWConfig.getResetSchedule() == PWConfigSpec.ResetSchedule.ON_RESTART;
+    }
+
+    /**
+     * Get the duration until the next seed rotation from now, or null if rotation is disabled
+     * or if the schedule is ON_RESTART (use {@link #isOnRestartSchedule()} in that case).
      */
     public static Duration getTimeUntilNextReset() {
         if (!PWConfig.isSeedRotationEnabled()) {
+            return null;
+        }
+        if (PWConfig.getResetSchedule() == PWConfigSpec.ResetSchedule.ON_RESTART) {
             return null;
         }
         LocalDateTime now = LocalDateTime.now();
@@ -135,6 +153,7 @@ public final class SeedManager {
      */
     public static String nextResetFormatted(long seedCreatedAt) {
         if (!PWConfig.isSeedRotationEnabled()) return "rotation disabled";
+        if (PWConfig.getResetSchedule() == PWConfigSpec.ResetSchedule.ON_RESTART) return "on every restart";
         if (seedCreatedAt <= 0) return "unknown (no timestamp)";
         LocalDateTime createdAt = LocalDateTime.ofInstant(
                 Instant.ofEpochSecond(seedCreatedAt), ZoneId.systemDefault());

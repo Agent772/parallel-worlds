@@ -193,7 +193,7 @@ public final class PWAdminCommands {
             source.sendFailure(Component.translatable("parallelworlds.admin.dim_manager_unavailable"));
             return 0;
         }
-        mgr.evacuateAllPlayers();
+        mgr.evacuateAllPlayers(true);
         source.sendSuccess(() -> Component.translatable("parallelworlds.admin.returnall.success")
                 .withStyle(ChatFormatting.GREEN), true);
         return 1;

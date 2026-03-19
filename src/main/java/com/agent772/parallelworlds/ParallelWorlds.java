@@ -240,9 +240,14 @@ public class ParallelWorlds {
             }
         }
 
-        // Evacuate players from exploration dimensions
+        // Evacuate players from exploration dimensions.
+        // In PERSIST_UNTIL_ROTATION mode the dimension data survives the restart and
+        // the same key is reused, so players can remain in the dimension.  The login
+        // handler already evacuates players whose dim was deleted (e.g. after rotation).
         if (dimensionManager != null) {
-            dimensionManager.evacuateAllPlayers();
+            if (PWConfig.getPersistenceMode() != PWConfigSpec.PersistenceMode.PERSIST_UNTIL_ROTATION) {
+                dimensionManager.evacuateAllPlayers();
+            }
             dimensionManager.clearCaches();
             dimensionManager = null;
         }

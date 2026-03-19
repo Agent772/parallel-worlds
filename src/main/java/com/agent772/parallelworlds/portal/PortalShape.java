@@ -216,6 +216,25 @@ public final class PortalShape {
         return positions;
     }
 
+
+    /**
+     * Returns true when the frame is valid AND every interior position contains a portal block.
+     * Used by {@code updateShape} to decide whether to cascade-remove portal blocks:
+     * if the shape is incomplete (some interior is air, e.g. a portal block was just broken)
+     * every remaining portal block should also disappear, matching vanilla nether portal behaviour.
+     */
+    public boolean isCompletelyFilled() {
+        Direction rightDir = axis == Direction.Axis.X ? Direction.EAST : Direction.SOUTH;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (!level.getBlockState(bottomLeft.relative(rightDir, x).above(y)).is(PWBlocks.PW_PORTAL.get())) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private static boolean isFrameBlock(LevelAccessor level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         String configFrame = PWConfig.getPortalFrameBlock();

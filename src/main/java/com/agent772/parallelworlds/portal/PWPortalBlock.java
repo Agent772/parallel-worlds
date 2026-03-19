@@ -5,6 +5,7 @@ import com.agent772.parallelworlds.data.PWSavedData;
 import com.agent772.parallelworlds.data.ReturnPosition;
 import com.agent772.parallelworlds.dimension.DimensionRegistrar;
 import com.agent772.parallelworlds.dimension.DimensionUtils;
+import com.agent772.parallelworlds.network.PWNetworking;
 import com.agent772.parallelworlds.teleport.TeleportHandler;
 import com.mojang.logging.LogUtils;
 import net.minecraft.ChatFormatting;
@@ -226,6 +227,9 @@ public class PWPortalBlock extends Block implements Portal {
         // Calculate destination position (center of exploration portal)
         Vec3 destPos = PortalBuilder.getPortalCenter(explorationPortalPos, explorationAxis);
 
+        // Capture for lambda — both are effectively final after the if/else above
+        ResourceLocation capturedExplorationDimId = target.dimension().location();
+
         return new DimensionTransition(
                 target, destPos, Vec3.ZERO,
                 player.getYRot(), player.getXRot(),
@@ -235,6 +239,10 @@ public class PWPortalBlock extends Block implements Portal {
                         sp.displayClientMessage(
                                 Component.translatable("parallelworlds.teleport.success")
                                         .withStyle(ChatFormatting.GREEN), false);
+                        // Create portal waypoint on the client (Xaero's Minimap compat)
+                        PWNetworking.sendWaypointSync(sp, capturedExplorationDimId,
+                                explorationPortalPos.getX(), explorationPortalPos.getY(),
+                                explorationPortalPos.getZ(), true);
                     }
                 }).then(DimensionTransition.PLACE_PORTAL_TICKET)
         );
@@ -283,6 +291,9 @@ public class PWPortalBlock extends Block implements Portal {
         TeleportHandler.clearDangerousEffects(player);
         TeleportHandler.markPortalInProgress(player.getUUID());
 
+        // Capture exploration dim ID before lambda (level is the exploration ServerLevel)
+        ResourceLocation capturedExplorationDimId = level.dimension().location();
+
         return new DimensionTransition(
                 returnLevel, destPos, Vec3.ZERO,
                 player.getYRot(), player.getXRot(),
@@ -291,9 +302,9 @@ public class PWPortalBlock extends Block implements Portal {
                         TeleportHandler.clearPortalInProgress(sp.getUUID());
                         TeleportHandler.removeReturnPosition(sp);
                         PWSavedData.get(sp.server).clearPlayerEntryPortal(sp.getUUID());
-                        sp.displayClientMessage(
-                                Component.translatable("parallelworlds.teleport.returned")
-                                        .withStyle(ChatFormatting.GREEN), false);
+                        // Remove portal waypoint on the client (Xaero's Minimap compat)
+                        PWNetworking.sendWaypointSync(sp, capturedExplorationDimId, 0, 0, 0, false);
+                        // Message is sent by PWEventHandlers.onPlayerChangedDimension.
                     }
                 }).then(DimensionTransition.PLACE_PORTAL_TICKET)
         );
@@ -364,9 +375,19 @@ public class PWPortalBlock extends Block implements Portal {
     @SuppressWarnings("deprecation")
     public BlockState updateShape(BlockState state, Direction direction, BlockState neighborState,
                                    LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
-        if (direction.getAxis() != Direction.Axis.Y || direction.getAxis() == state.getValue(AXIS)) {
+        Direction.Axis neighborAxis = direction.getAxis();
+        Direction.Axis portalAxis = state.getValue(AXIS);
+        // Mirror vanilla NetherPortalBlock logic exactly:
+        // - Skip for the depth direction (horizontal axis perpendicular to portal plane).
+        // - When the changed neighbour IS a portal block, skip — this avoids falsely
+        //   cascading during portal construction (blocks placed row-by-row).
+        // - Otherwise the frame AND fully-filled interior must both be valid.  If a portal
+        //   block was just broken (neighbour became AIR), isCompletelyFilled() returns false
+        //   and the cascade removes this block too, propagating outward.
+        boolean isDepthDirection = neighborAxis.isHorizontal() && neighborAxis != portalAxis;
+        if (!isDepthDirection && !neighborState.is(this)) {
             Optional<PortalShape> shape = PortalShape.findPortalShape(level, pos);
-            if (shape.isEmpty()) {
+            if (shape.isEmpty() || !shape.get().isCompletelyFilled()) {
                 return Blocks.AIR.defaultBlockState();
             }
         }
@@ -383,20 +404,8 @@ public class PWPortalBlock extends Block implements Portal {
                     PortalTargetManager.removeTarget(serverLevel, canonical);
                 }
             }
-
-            Direction.Axis axis = state.getValue(AXIS);
-            for (Direction dir : Direction.values()) {
-                if (dir.getAxis() == Direction.Axis.Y || dir.getAxis() == axis) {
-                    BlockPos neighbor = pos.relative(dir);
-                    BlockState neighborState = level.getBlockState(neighbor);
-                    if (neighborState.is(this)) {
-                        Optional<PortalShape> shape = PortalShape.findPortalShape(level, neighbor);
-                        if (shape.isEmpty()) {
-                            level.setBlock(neighbor, Blocks.AIR.defaultBlockState(), 3);
-                        }
-                    }
-                }
-            }
+            // Cascade to neighbouring portal blocks is handled entirely by updateShape,
+            // which the engine calls on every adjacent block automatically.
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
     }

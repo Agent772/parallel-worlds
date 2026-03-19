@@ -75,6 +75,8 @@ public final class PWConfig {
 
     // Compatibility
     private static boolean modCompatCleanupEnabled;
+    private static boolean xaeroPortalWaypointEnabled;
+    private static boolean journeyMapPortalWaypointEnabled;
 
     // Commands
     private static boolean commandTpEnabled;
@@ -174,6 +176,8 @@ public final class PWConfig {
     /** Refresh client-only cached values from the client config spec. Called on client load/reload. */
     public static void refreshClient() {
         modCompatCleanupEnabled = PWClientConfigSpec.MOD_COMPAT_CLEANUP_ENABLED.get();
+        xaeroPortalWaypointEnabled = PWClientConfigSpec.XAERO_PORTAL_WAYPOINT_ENABLED.get();
+        journeyMapPortalWaypointEnabled = PWClientConfigSpec.JOURNEYMAP_PORTAL_WAYPOINT_ENABLED.get();
     }
 
     // ── Getters ──
@@ -253,6 +257,8 @@ public final class PWConfig {
     }
 
     public static boolean isModCompatCleanupEnabled() { return modCompatCleanupEnabled; }
+    public static boolean isXaeroPortalWaypointEnabled() { return xaeroPortalWaypointEnabled; }
+    public static boolean isJourneyMapPortalWaypointEnabled() { return journeyMapPortalWaypointEnabled; }
 
     public static boolean isCommandTpEnabled() { return commandTpEnabled; }
     public static boolean isCommandReturnEnabled() { return commandReturnEnabled; }

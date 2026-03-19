@@ -220,10 +220,7 @@ public final class TeleportHandler {
         applyPostTeleportSafety(player);
         removeReturnPosition(player);
         recordCooldown(player);
-
-        player.displayClientMessage(
-                Component.translatable("parallelworlds.teleport.returned")
-                        .withStyle(ChatFormatting.GREEN), false);
+        // Message is sent by PWEventHandlers.onPlayerChangedDimension to avoid duplication.
     }
 
     /**
@@ -346,9 +343,7 @@ public final class TeleportHandler {
                 player.changeDimension(transition);
                 applyPostTeleportSafety(player);
                 removeReturnPosition(player);
-                player.displayClientMessage(
-                        Component.translatable("parallelworlds.teleport.returned")
-                                .withStyle(ChatFormatting.GREEN), false);
+                // Message sent by PWEventHandlers.onPlayerChangedDimension.
                 return;
             }
         }
@@ -744,15 +739,24 @@ public final class TeleportHandler {
 
         BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos();
 
-        // Search upward
-        int maxUp = Math.min(centerY + 32, level.getMaxBuildHeight() - 2);
-        for (int y = centerY; y <= maxUp; y++) {
+        // Priority 1: actual terrain surface via heightmap.
+        // MOTION_BLOCKING_NO_LEAVES returns the Y of the first non-blocking block above
+        // the surface (i.e. where player feet stand), skipping leaf canopy.
+        // Checking this first prevents landing inside caves that satisfy the 2-block
+        // clearance check but sit below the real surface inside a hill.
+        int surfaceY = level.getHeightmapPos(
+                Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, 0, z)).getY();
+        mpos.set(x, surfaceY, z);
+        if (isSafePosition(level, mpos)) return mpos.immutable();
+
+        // Priority 2: small window near the surface (handles water tops, overhangs, etc.)
+        int searchMin = Math.max(surfaceY - 4, level.getMinBuildHeight() + 1);
+        int searchMax = Math.min(surfaceY + 4, level.getMaxBuildHeight() - 2);
+        for (int y = surfaceY + 1; y <= searchMax; y++) {
             mpos.set(x, y, z);
             if (isSafePosition(level, mpos)) return mpos.immutable();
         }
-        // Search downward
-        int minDown = Math.max(centerY - 32, level.getMinBuildHeight() + 1);
-        for (int y = centerY - 1; y >= minDown; y--) {
+        for (int y = surfaceY - 1; y >= searchMin; y--) {
             mpos.set(x, y, z);
             if (isSafePosition(level, mpos)) return mpos.immutable();
         }

@@ -20,6 +20,7 @@
   "parallelworlds.command.list.click_to_tp": "Click to teleport",
   "parallelworlds.command.list.total": "Total: %s dimension(s)",
   "parallelworlds.command.seed_resets_in": "Seed resets in %s",
+  "parallelworlds.command.seed_resets_on_restart": "Seed resets on next restart",
   "parallelworlds.command.player_only": "This command can only be used by a player.",
   "parallelworlds.command.not_in_exploration": "You are not in an exploration dimension.",
   "parallelworlds.command.info.header": "=== Dimension Info ===",
@@ -42,9 +43,11 @@
   "parallelworlds.command.help.return_disabled": " — Return from exploration (disabled)",
   "parallelworlds.command.help.help": " — Show this help",
 
+  "parallelworlds.event.logged_in_exploration": "You are currently in an exploration dimension.",
   "parallelworlds.event.returned_from_exploration": "Returned from exploration dimension.",
+  "parallelworlds.event.admin_evacuated": "You have been evacuated from the exploration dimension by an admin.",
   "parallelworlds.event.respawned_overworld": "Respawned in overworld — beds in exploration dimensions are temporary.",
-  "parallelworlds.event.evacuated_bed": "Dimension reset — returned to your bed.",
+  "parallelworlds.event.evacuated_bed": "You have been returned to your bed.",
 
   "parallelworlds.teleport.success": "Teleported to exploration dimension!",
   "parallelworlds.teleport.failed": "Teleportation failed! Please try again.",

@@ -75,11 +75,20 @@ public class DimensionManager {
      * bed → entry position → world-spawn surface.
      */
     public void evacuateAllPlayers() {
+        evacuateAllPlayers(false);
+    }
+
+    public void evacuateAllPlayers(boolean byAdmin) {
         LOGGER.info("Evacuating all players from exploration dimensions");
         List<ServerPlayer> toEvac = getPlayersInExplorationDimensions();
 
         for (ServerPlayer player : toEvac) {
             try {
+                if (byAdmin) {
+                    player.displayClientMessage(
+                            net.minecraft.network.chat.Component.translatable("parallelworlds.event.admin_evacuated")
+                                    .withStyle(net.minecraft.ChatFormatting.YELLOW), false);
+                }
                 TeleportHandler.evacuatePlayer(player);
             } catch (Exception e) {
                 LOGGER.error("Failed to evacuate {}", player.getName().getString(), e);

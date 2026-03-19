@@ -111,11 +111,16 @@ public final class PWCommands {
                 .withStyle(ChatFormatting.YELLOW), false);
 
         // Show rotation time if enabled
-        Duration timeUntilReset = SeedManager.getTimeUntilNextReset();
-        if (timeUntilReset != null) {
-            String timeStr = formatDuration(timeUntilReset);
-            source.sendSuccess(() -> Component.translatable("parallelworlds.command.seed_resets_in", timeStr)
+        if (SeedManager.isOnRestartSchedule()) {
+            source.sendSuccess(() -> Component.translatable("parallelworlds.command.seed_resets_on_restart")
                     .withStyle(ChatFormatting.AQUA), false);
+        } else {
+            Duration timeUntilReset = SeedManager.getTimeUntilNextReset();
+            if (timeUntilReset != null) {
+                String timeStr = formatDuration(timeUntilReset);
+                source.sendSuccess(() -> Component.translatable("parallelworlds.command.seed_resets_in", timeStr)
+                        .withStyle(ChatFormatting.AQUA), false);
+            }
         }
 
         return dims.size();

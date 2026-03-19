@@ -24,6 +24,7 @@ repositories {
     maven { url = "https://maven.createmod.net" } // Create, Ponder, Flywheel
     maven { url = "https://maven.ithundxr.dev/snapshots" } // Registrate
     maven { url = "https://api.modrinth.com/maven" } // Jade, TFMG
+    maven { name = "JourneyMap"; url = "https://maven.blamejared.com" } // JourneyMap API
 }
 
 base {
@@ -122,6 +123,9 @@ dependencies {
 
     // Tempad optional compatibility (compileOnly — not required at runtime)
     compileOnly "maven.modrinth:tempad:${tempad_version}"
+
+    // JourneyMap optional compatibility (compileOnly — not required at runtime)
+    compileOnly("info.journeymap:journeymap-api-neoforge:${journeymap_api_version}") { changing = true }
 
     // Create mod dependencies
     // implementation("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
