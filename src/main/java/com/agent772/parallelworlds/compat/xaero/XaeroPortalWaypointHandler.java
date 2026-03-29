@@ -4,7 +4,10 @@ import com.agent772.parallelworlds.config.PWConfig;
 import com.agent772.parallelworlds.network.payload.WaypointSyncPayload;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import org.slf4j.Logger;
@@ -54,6 +57,18 @@ public final class XaeroPortalWaypointHandler {
      */
     private static final Map<ResourceLocation, Object[]> waypointCache = new ConcurrentHashMap<>();
 
+    /** Ticks to wait before the first waypoint-add attempt (lets the portal transition finish). */
+    private static final int INITIAL_DELAY_TICKS  = 10;
+    /** Max attempts before giving up and bootstrapping the container. */
+    private static final int RETRY_COUNT          = 20;
+    /** Game ticks between retry attempts — keeps game-thread overhead minimal. */
+    private static final int RETRY_INTERVAL_TICKS =  5;
+
+    // Cached reflection handles — lazily initialised on first use, valid for the
+    // lifetime of the JVM (Xaero's classes are never unloaded mid-session).
+    private static volatile Method         currentSessionMethod;
+    private static volatile Constructor<?> waypointCtor;
+
     private XaeroPortalWaypointHandler() {}
 
     // ── Payload handler ──────────────────────────────────────────────────────
@@ -64,7 +79,11 @@ public final class XaeroPortalWaypointHandler {
 
         context.enqueueWork(() -> {
             if (payload.add()) {
-                scheduleAddWaypoint(payload.dimId(), payload.x(), payload.y(), payload.z(), 60);
+                // Defer the first check so portal-transition work finishes first,
+                // then poll at RETRY_INTERVAL_TICKS spacing so we don't spam the
+                // game-thread task queue every single tick.
+                scheduleAfterTicks(INITIAL_DELAY_TICKS,
+                        () -> scheduleAddWaypoint(payload.dimId(), payload.x(), payload.y(), payload.z(), RETRY_COUNT));
             } else {
                 try {
                     removeWaypoint(payload.dimId());
@@ -167,10 +186,7 @@ public final class XaeroPortalWaypointHandler {
             }
 
             // Waypoint(int x, int y, int z, String name, String initials, int colorIndex)
-            Class<?> wpClass = Class.forName("xaero.common.minimap.waypoints.Waypoint");
-            Constructor<?> ctor = wpClass.getConstructor(
-                    int.class, int.class, int.class, String.class, String.class, int.class);
-            Object waypoint = ctor.newInstance(x, y, z, WAYPOINT_NAME, "P", WAYPOINT_COLOR);
+            Object waypoint = getWaypointCtor().newInstance(x, y, z, WAYPOINT_NAME, "P", WAYPOINT_COLOR);
 
             list.add(waypoint);
             waypointCache.put(dimId, new Object[]{set, waypoint});
@@ -189,11 +205,11 @@ public final class XaeroPortalWaypointHandler {
         }
     }
 
-    /** Schedules a retry on the next game tick, or logs and gives up if retries are exhausted. */
+    /** Schedules a retry after {@link #RETRY_INTERVAL_TICKS} ticks, or bootstraps if retries are exhausted. */
     private static void retry(String reason, ResourceLocation dimId, int x, int y, int z, int retriesLeft) {
         if (retriesLeft > 0) {
             LOGGER.debug("[PW Xaero Compat] ADD retry ({} left): {}", retriesLeft, reason);
-            Minecraft.getInstance().execute(() -> scheduleAddWaypoint(dimId, x, y, z, retriesLeft - 1));
+            scheduleAfterTicks(RETRY_INTERVAL_TICKS, () -> scheduleAddWaypoint(dimId, x, y, z, retriesLeft - 1));
         } else {
             // Container never loaded — player entered a brand-new dim with no prior
             // waypoint data on disk.  Bootstrap the container ourselves so Xaero has
@@ -206,9 +222,12 @@ public final class XaeroPortalWaypointHandler {
     /**
      * Last-resort path: Xaero never loaded a container for this dim (no prior
      * waypoint file on disk).  We create the container and its first world via
-     * {@code addWorldContainer} + {@code container.addWorld(worldID)}.  Because
-     * the container is empty at this point, {@code addWorld} creates the very
-     * first world (index 1) which Xaero will treat as the auto world on next load.
+     * {@code addWorldContainer} + {@code container.addWorld(autoWorldNode)}.
+     * The world node name is obtained from {@code getNewAutoWorldID} so that it
+     * matches the name Xaero will auto-assign on subsequent loads (e.g.
+     * {@code "waypoints"} for singleplayer/LAN, {@code "mwX,Z"} for multiplayer).
+     * Using the raw {@code namespace$path} string previously caused Xaero to
+     * create a second, numbered world entry ("1-dimname") on re-entry.
      */
     private static void bootstrapAddWaypoint(ResourceLocation dimId, int x, int y, int z) {
         try {
@@ -237,9 +256,26 @@ public final class XaeroPortalWaypointHandler {
             // between our last retry and now.
             Object world = invoke(container, "getFirstWorld");
             if (world == null) {
+                // Use the auto-assigned world node name that Xaero would generate
+                // for this dimension, so our bootstrapped world matches what Xaero
+                // will auto-detect on the next load (e.g. "waypoints" for singleplayer,
+                // or "mwX,Z" for multiplayer).  Using the raw namespace$path string
+                // caused Xaero to create a second, numbered world ("1-dimname").
+                String autoWorldNode;
+                try {
+                    ResourceKey<Level> dimKey = ResourceKey.create(Registries.DIMENSION, dimId);
+                    autoWorldNode = (String) manager.getClass()
+                            .getMethod("getNewAutoWorldID", net.minecraft.resources.ResourceKey.class, boolean.class)
+                            .invoke(manager, dimKey, false);
+                } catch (Exception ex) {
+                    LOGGER.debug("[PW Xaero Compat] getNewAutoWorldID unavailable, falling back to worldID: {}", ex.getMessage());
+                    autoWorldNode = worldID;
+                }
+                if (autoWorldNode == null) autoWorldNode = worldID;
                 world = container.getClass()
                         .getMethod("addWorld", String.class)
-                        .invoke(container, worldID);
+                        .invoke(container, autoWorldNode);
+                LOGGER.debug("[PW Xaero Compat] Bootstrap: using autoWorldNode='{}' for {}", autoWorldNode, dimId);
             }
             if (world == null) {
                 LOGGER.warn("[PW Xaero Compat] Could not get/create world in {} for {}", targetContainerID, dimId);
@@ -261,10 +297,7 @@ public final class XaeroPortalWaypointHandler {
                 if (WAYPOINT_NAME.equals(invoke(existing, "getName"))) return;
             }
 
-            Class<?> wpClass = Class.forName("xaero.common.minimap.waypoints.Waypoint");
-            Constructor<?> ctor = wpClass.getConstructor(
-                    int.class, int.class, int.class, String.class, String.class, int.class);
-            Object waypoint = ctor.newInstance(x, y, z, WAYPOINT_NAME, "P", WAYPOINT_COLOR);
+            Object waypoint = getWaypointCtor().newInstance(x, y, z, WAYPOINT_NAME, "P", WAYPOINT_COLOR);
             list.add(waypoint);
             waypointCache.put(dimId, new Object[]{set, waypoint});
 
@@ -409,10 +442,34 @@ public final class XaeroPortalWaypointHandler {
      * Returns the current {@code XaeroMinimapSession} instance, or {@code null}
      * if Xaero is not loaded or the session is not yet initialised.
      */
+    /**
+     * Posts {@code task} to the game-thread task queue after {@code ticks} ticks have elapsed.
+     * Uses chained {@link Minecraft#execute} calls so no thread is blocked while waiting.
+     */
+    private static void scheduleAfterTicks(int ticks, Runnable task) {
+        if (ticks <= 0) {
+            Minecraft.getInstance().execute(task);
+        } else {
+            Minecraft.getInstance().execute(() -> scheduleAfterTicks(ticks - 1, task));
+        }
+    }
+
+    /** Returns the cached {@link Constructor} for {@code xaero.common.minimap.waypoints.Waypoint}. */
+    private static Constructor<?> getWaypointCtor() throws Exception {
+        if (waypointCtor == null) {
+            waypointCtor = Class.forName("xaero.common.minimap.waypoints.Waypoint")
+                    .getConstructor(int.class, int.class, int.class, String.class, String.class, int.class);
+        }
+        return waypointCtor;
+    }
+
     private static Object getSession() {
         try {
-            Class<?> cls = Class.forName("xaero.common.XaeroMinimapSession");
-            return cls.getMethod("getCurrentSession").invoke(null);
+            if (currentSessionMethod == null) {
+                currentSessionMethod = Class.forName("xaero.common.XaeroMinimapSession")
+                        .getMethod("getCurrentSession");
+            }
+            return currentSessionMethod.invoke(null);
         } catch (Exception e) {
             return null;
         }
