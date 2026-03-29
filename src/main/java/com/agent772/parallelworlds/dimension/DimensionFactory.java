@@ -5,16 +5,25 @@ import com.agent772.parallelworlds.accessor.IServerDimensionAccessor;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.biome.BiomeSource;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterList;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import org.slf4j.Logger;
+
+import javax.annotation.Nullable;
+import java.util.Optional;
 
 /**
  * Creates exploration dimensions at server startup using runtime registry manipulation.
@@ -121,7 +130,19 @@ public final class DimensionFactory {
         ServerLevel sourceLevel = server.getLevel(sourceKey);
 
         if (sourceLevel != null) {
-            return sourceLevel.getChunkSource().getGenerator();
+            ChunkGenerator sourceGen = sourceLevel.getChunkSource().getGenerator();
+
+            // If the generator's noise settings were scoped into another namespace
+            // (e.g. dimconfig rewrites minecraft:overworld → dimconfig:overworld to pin
+            // vanilla terrain), reconstruct a fresh generator from the original
+            // minecraft: registry entries so PW dims inherit the real mod terrain.
+            if (sourceGen instanceof NoiseBasedChunkGenerator noiseGen) {
+                ChunkGenerator reconstructed = maybeReconstructGenerator(
+                        server, noiseGen, baseDimension);
+                if (reconstructed != null) return reconstructed;
+            }
+
+            return sourceGen;
         }
 
         // 2. Fallback: look up the LevelStem from registry (for early-startup edge cases)
@@ -135,8 +156,144 @@ public final class DimensionFactory {
             }
         }
 
-        // 3. Last resort: log error and throw
+        // 3. Last resort: throw
         throw new IllegalStateException("Cannot find source dimension to clone generator: " + baseDimension);
+    }
+
+    // ── Reconstruct chunk generator for dimconfig compatibility ──
+
+    /**
+     * If the source generator's noise settings were rewritten into a different
+     * namespace (e.g. {@code dimconfig:overworld} instead of
+     * {@code minecraft:overworld}), construct a fresh {@link NoiseBasedChunkGenerator}
+     * using the original {@code minecraft:} registry entries.
+     *
+     * <p>Returns {@code null} if no reconstruction is needed (settings namespace
+     * already matches the base dimension).
+     */
+    @Nullable
+    private static ChunkGenerator maybeReconstructGenerator(MinecraftServer server,
+                                                             NoiseBasedChunkGenerator sourceGen,
+                                                             ResourceLocation baseDimension) {
+        RegistryAccess registryAccess = server.registryAccess();
+
+        // Check if noise settings were rewritten to a foreign namespace
+        Optional<ResourceKey<NoiseGeneratorSettings>> settingsKey =
+                sourceGen.generatorSettings().unwrapKey();
+        if (settingsKey.isEmpty()) return null; // direct holder — no key to inspect
+
+        ResourceLocation settingsId = settingsKey.get().location();
+        if (settingsId.getNamespace().equals(baseDimension.getNamespace())) {
+            return null; // namespace matches (e.g. minecraft:overworld) — no rewrite detected
+        }
+
+        // --- Noise settings: look up the original minecraft: entry ---
+        ResourceLocation originalSettingsId = ResourceLocation.fromNamespaceAndPath(
+                baseDimension.getNamespace(), settingsId.getPath());
+        Registry<NoiseGeneratorSettings> settingsRegistry =
+                registryAccess.registryOrThrow(Registries.NOISE_SETTINGS);
+        Optional<Holder.Reference<NoiseGeneratorSettings>> originalSettings =
+                settingsRegistry.getHolder(ResourceKey.create(Registries.NOISE_SETTINGS, originalSettingsId));
+        if (originalSettings.isEmpty()) {
+            LOGGER.warn("[PW] Cannot find original noise settings {} — using source generator as-is",
+                    originalSettingsId);
+            return null;
+        }
+
+        // --- Biome source: try modded level stem reference first, then preset, then source ---
+        BiomeSource biomeSource = readModdedBiomeSource(server, baseDimension);
+        if (biomeSource == null) {
+            biomeSource = reconstructBiomeSourceFromPreset(registryAccess, baseDimension);
+        }
+        if (biomeSource == null) {
+            // Last resort: reuse the source biome source (may still have the rewritten preset,
+            // but at least the noise settings will be correct)
+            biomeSource = sourceGen.getBiomeSource();
+        }
+
+        LOGGER.info("[PW] Reconstructed generator for {} → noise_settings={}, bypassing scoped {}",
+                baseDimension, originalSettingsId, settingsId);
+        return new NoiseBasedChunkGenerator(biomeSource, originalSettings.get());
+    }
+
+    /**
+     * Reads the mod-provided ("modded") level stem from dimconfig's reference file in the
+     * virtual data pack and extracts the biome source from it.
+     *
+     * <p>dimconfig stores the original mod-provided level stem (e.g. Terralith's overworld.json
+     * with inline biome list) at {@code dimconfig:terrain_router/modded_level_stem/<path>.json}
+     * so that PW can reconstruct generators with the correct biome source even when the pin
+     * replaces the level stem.
+     *
+     * @return the biome source from the modded level stem, or {@code null} if not available
+     */
+    @Nullable
+    private static BiomeSource readModdedBiomeSource(MinecraftServer server,
+                                                      ResourceLocation baseDimension) {
+        ResourceLocation refKey = ResourceLocation.fromNamespaceAndPath(
+                "dimconfig", "terrain_router/modded_level_stem/" + baseDimension.getPath() + ".json");
+        try {
+            Optional<net.minecraft.server.packs.resources.Resource> resource =
+                    server.getResourceManager().getResource(refKey);
+            if (resource.isEmpty()) {
+                LOGGER.debug("[PW] No modded level stem reference at {} — dimconfig may not be installed or no pin active",
+                        refKey);
+                return null;
+            }
+
+            // Parse the generator.biome_source from the modded level stem JSON
+            com.google.gson.JsonObject root;
+            try (java.io.InputStream is = resource.get().open()) {
+                root = com.google.gson.JsonParser.parseReader(
+                        new java.io.InputStreamReader(is, java.nio.charset.StandardCharsets.UTF_8))
+                        .getAsJsonObject();
+            }
+
+            if (!root.has("generator")) return null;
+            com.google.gson.JsonObject gen = root.getAsJsonObject("generator");
+            if (!gen.has("biome_source")) return null;
+            com.google.gson.JsonElement biomeSourceJson = gen.get("biome_source");
+
+            // Deserialize the biome source using MC's codec system with registry resolution
+            com.mojang.serialization.DynamicOps<com.google.gson.JsonElement> ops =
+                    net.minecraft.resources.RegistryOps.create(
+                            com.mojang.serialization.JsonOps.INSTANCE, server.registryAccess());
+            com.mojang.serialization.DataResult<? extends BiomeSource> result =
+                    BiomeSource.CODEC.parse(ops, biomeSourceJson);
+
+            Optional<? extends BiomeSource> parsed = result.result();
+            if (parsed.isPresent()) {
+                LOGGER.info("[PW] Parsed modded biome source from {} ({} possible biomes)",
+                        refKey, parsed.get().possibleBiomes().size());
+                return parsed.get();
+            } else {
+                LOGGER.warn("[PW] Failed to parse biome source from {}: {}",
+                        refKey, result.error().map(Object::toString).orElse("unknown"));
+            }
+        } catch (Exception e) {
+            LOGGER.debug("[PW] Failed to read modded level stem reference {}: {}", refKey, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Constructs a fresh {@link MultiNoiseBiomeSource} from the base dimension's
+     * biome-source preset in the registry. Returns {@code null} if the preset is
+     * not found (e.g. non-multi_noise dimensions like the_end).
+     */
+    @Nullable
+    private static BiomeSource reconstructBiomeSourceFromPreset(RegistryAccess registryAccess,
+                                                                 ResourceLocation baseDimension) {
+        Registry<MultiNoiseBiomeSourceParameterList> presetRegistry =
+                registryAccess.registryOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
+        ResourceKey<MultiNoiseBiomeSourceParameterList> presetKey =
+                ResourceKey.create(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST, baseDimension);
+
+        Optional<Holder.Reference<MultiNoiseBiomeSourceParameterList>> holder =
+                presetRegistry.getHolder(presetKey);
+        if (holder.isEmpty()) return null;
+
+        return MultiNoiseBiomeSource.createFromPreset(holder.get());
     }
 
     // ── Resolve DimensionType from source dimension ──
