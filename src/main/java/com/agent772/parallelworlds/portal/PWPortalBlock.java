@@ -176,10 +176,37 @@ public class PWPortalBlock extends Block implements Portal {
         }
 
         ServerLevel target = targetOpt.get();
+
+        // Check dimension locks before building/entering the portal.
+        // Locks are keyed by base dimension (e.g. minecraft:the_nether), so resolve
+        // the exploration key back to its base dimension for the lookup.
+        ResourceLocation explorationDimLoc = target.dimension().location();
+        if (PWConfig.isDimensionLocksEnabled()) {
+            ResourceLocation baseDimLoc = DimensionRegistrar.getInstance()
+                    .getBaseDimension(target.dimension())
+                    .orElse(explorationDimLoc);
+            Map<ResourceLocation, ResourceLocation> locks = PWConfig.getParsedDimensionLocks();
+            ResourceLocation requiredAdvancement = locks.get(baseDimLoc);
+            if (requiredAdvancement != null) {
+                PWSavedData savedData = PWSavedData.get(level.getServer());
+                boolean manuallyUnlocked = savedData.hasManualUnlock(player.getUUID(), baseDimLoc);
+                if (!manuallyUnlocked) {
+                    var advancement = level.getServer().getAdvancements().get(requiredAdvancement);
+                    boolean hasAdvancement = advancement != null
+                            && player.getAdvancements().getOrStartProgress(advancement).isDone();
+                    if (!hasAdvancement) {
+                        player.displayClientMessage(
+                                Component.translatable("parallelworlds.command.tp.locked", requiredAdvancement.toString())
+                                        .withStyle(ChatFormatting.RED), false);
+                        return null;
+                    }
+                }
+            }
+        }
+
         PWSavedData data = PWSavedData.get(level.getServer());
 
         // Get or build the shared portal in the exploration dimension
-        ResourceLocation explorationDimLoc = target.dimension().location();
         BlockPos explorationPortalPos;
         Direction.Axis explorationAxis;
 

@@ -226,13 +226,16 @@ public final class PWCommands {
             return 0;
         }
 
-        // Check dimension locks
+        // Check dimension locks.
+        // Locks are keyed by base dimension (e.g. minecraft:the_nether), so resolve
+        // the exploration key back to its base dimension for the lookup.
         if (PWConfig.isDimensionLocksEnabled()) {
             Map<ResourceLocation, ResourceLocation> locks = PWConfig.getParsedDimensionLocks();
-            ResourceLocation requiredAdvancement = locks.get(dimLoc);
+            ResourceLocation baseDimLoc = registrar.getBaseDimension(targetLevel.dimension()).orElse(dimLoc);
+            ResourceLocation requiredAdvancement = locks.get(baseDimLoc);
             if (requiredAdvancement != null) {
                 PWSavedData savedData = PWSavedData.get(player.server);
-                boolean manuallyUnlocked = savedData.hasManualUnlock(player.getUUID(), dimLoc);
+                boolean manuallyUnlocked = savedData.hasManualUnlock(player.getUUID(), baseDimLoc);
                 if (!manuallyUnlocked) {
                     var advancement = player.server.getAdvancements().get(requiredAdvancement);
                     boolean hasAdvancement = advancement != null

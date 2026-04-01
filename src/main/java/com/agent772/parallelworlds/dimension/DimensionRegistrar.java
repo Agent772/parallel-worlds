@@ -215,6 +215,16 @@ public final class DimensionRegistrar {
         return dimensionMappings.containsValue(key);
     }
 
+    /** Returns the base dimension location for a given exploration dimension key, or empty if not found. */
+    public Optional<ResourceLocation> getBaseDimension(ResourceKey<Level> explorationKey) {
+        for (Map.Entry<ResourceLocation, ResourceKey<Level>> entry : dimensionMappings.entrySet()) {
+            if (entry.getValue().equals(explorationKey)) {
+                return Optional.of(entry.getKey());
+            }
+        }
+        return Optional.empty();
+    }
+
     /** base → exploration key map snapshot */
     public Map<ResourceKey<Level>, ResourceKey<Level>> getRegisteredDimensions() {
         Map<ResourceKey<Level>, ResourceKey<Level>> result = new HashMap<>();

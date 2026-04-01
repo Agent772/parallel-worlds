@@ -378,7 +378,8 @@ public final class PWConfigSpec {
                 .comment("",
                          "List of dimension lock entries as 'mod:dimension=mod:advancement_id'.",
                          "Players must complete the advancement to access the dimension.",
-                         "Example: minecraft:the_nether=minecraft:story/enter_the_nether")
+                         "TOML requires each entry to be a quoted string.",
+                         "Example: [\"minecraft:the_nether=minecraft:story/enter_the_nether\"]")
                 .defineListAllowEmpty("dimensionLocks",
                         List.of(),
                         () -> "",
