@@ -95,21 +95,36 @@ public abstract class MixinMinecraftServer implements IServerDimensionAccessor {
             pw$LOGGER.info("Creating ServerLevel for {} with seed {}", dimensionKey.location(), seed);
 
             // Save original world seed before constructing ServerLevel to prevent
-            // the exploration seed from leaking into PrimaryLevelData (fixes #1)
+            // the exploration seed from leaking into PrimaryLevelData (fixes #1, #3)
             WorldOptions originalOptions = worldData.worldGenOptions();
             long originalSeed = originalOptions.seed();
 
+            // Enable write guard if not already active (DimensionRegistrar enables
+            // a broader guard around the entire batch; this is a per-dimension fallback)
+            boolean guardWasActive = ExplorationSeedManager.isWorldOptionsGuardActive();
+            if (!guardWasActive) {
+                ExplorationSeedManager.enableWorldOptionsGuard(originalOptions);
+            }
+
             // Create ServerLevel
-            ServerLevel newLevel = new ServerLevel(
-                    server, executor, storageSource, levelData,
-                    dimensionKey, levelStem, progressListener,
-                    false, seed, List.of(), true, null
-            );
+            ServerLevel newLevel;
+            try {
+                newLevel = new ServerLevel(
+                        server, executor, storageSource, levelData,
+                        dimensionKey, levelStem, progressListener,
+                        false, seed, List.of(), true, null
+                );
+            } finally {
+                if (!guardWasActive) {
+                    ExplorationSeedManager.disableWorldOptionsGuard();
+                }
+            }
 
             // Clear context immediately
             ExplorationSeedManager.clearCurrentDimension();
 
             // Restore original seed if it was modified during ServerLevel construction
+            // (secondary safety net — the write guard should have prevented this)
             if (worldData.worldGenOptions().seed() != originalSeed) {
                 pw$LOGGER.warn("Seed leak detected after creating {}! " +
                                 "Global seed was changed from {} to {} — restoring original",

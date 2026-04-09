@@ -251,8 +251,12 @@ public final class PWConfigSpec {
                 .comment("", "Aggressively unload chunks when no players are in the dimension")
                 .define("aggressiveChunkUnloading", true);
         PREVENT_DISK_SAVES = builder
-                .comment("", "Prevent mining dimension chunks from saving to disk (saves I/O)")
-                .define("preventDiskSaves", false);
+                .comment("",
+                         "Prevent mining dimension chunks and level data from saving to disk.",
+                         "Recommended to keep enabled: exploration dimensions are transient and rotate",
+                         "on schedule, so persisting their data wastes I/O and risks overwriting the",
+                         "overworld's seed/noise settings in level.dat.")
+                .define("preventDiskSaves", true);
         PREGEN_ENABLED = builder
                 .comment("", "Enable chunk pre-generation for mining dimensions")
                 .define("pregenEnabled", false);
