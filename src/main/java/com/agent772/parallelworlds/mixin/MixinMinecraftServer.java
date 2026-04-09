@@ -3,6 +3,7 @@ package com.agent772.parallelworlds.mixin;
 import com.agent772.parallelworlds.ParallelWorlds;
 import com.agent772.parallelworlds.accessor.IRegistryAccessor;
 import com.agent772.parallelworlds.accessor.IServerDimensionAccessor;
+import com.agent772.parallelworlds.accessor.IWorldDataAccessor;
 import com.agent772.parallelworlds.config.PWConfig;
 import com.agent772.parallelworlds.dimension.ExplorationSeedManager;
 import com.agent772.parallelworlds.teleport.TeleportHandler;
@@ -22,6 +23,7 @@ import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.storage.DerivedLevelData;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.level.storage.ServerLevelData;
@@ -92,6 +94,11 @@ public abstract class MixinMinecraftServer implements IServerDimensionAccessor {
             ExplorationSeedManager.registerDimensionSeed(dimensionKey, seed);
             pw$LOGGER.info("Creating ServerLevel for {} with seed {}", dimensionKey.location(), seed);
 
+            // Save original world seed before constructing ServerLevel to prevent
+            // the exploration seed from leaking into PrimaryLevelData (fixes #1)
+            WorldOptions originalOptions = worldData.worldGenOptions();
+            long originalSeed = originalOptions.seed();
+
             // Create ServerLevel
             ServerLevel newLevel = new ServerLevel(
                     server, executor, storageSource, levelData,
@@ -101,6 +108,18 @@ public abstract class MixinMinecraftServer implements IServerDimensionAccessor {
 
             // Clear context immediately
             ExplorationSeedManager.clearCurrentDimension();
+
+            // Restore original seed if it was modified during ServerLevel construction
+            if (worldData.worldGenOptions().seed() != originalSeed) {
+                pw$LOGGER.warn("Seed leak detected after creating {}! " +
+                                "Global seed was changed from {} to {} — restoring original",
+                        dimensionKey.location(), originalSeed, worldData.worldGenOptions().seed());
+                if (worldData instanceof IWorldDataAccessor accessor) {
+                    accessor.pw$setWorldOptions(originalOptions);
+                } else {
+                    pw$LOGGER.error("Cannot restore seed: WorldData is not accessible via mixin");
+                }
+            }
 
             // Safety cleanup on next tick
             server.execute(ExplorationSeedManager::clearCurrentDimension);
