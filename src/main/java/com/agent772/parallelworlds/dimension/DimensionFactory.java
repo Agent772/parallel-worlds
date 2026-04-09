@@ -3,9 +3,14 @@ package com.agent772.parallelworlds.dimension;
 import com.agent772.parallelworlds.ParallelWorlds;
 import com.agent772.parallelworlds.accessor.IServerDimensionAccessor;
 import com.mojang.logging.LogUtils;
+import com.mojang.serialization.DynamicOps;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -116,6 +121,12 @@ public final class DimensionFactory {
 
     private static ChunkGenerator cloneChunkGenerator(MinecraftServer server,
                                                        ResourceLocation baseDimension) {
+        ChunkGenerator sourceGen = getSourceGenerator(server, baseDimension);
+        return deepCopyGenerator(server.registryAccess(), sourceGen);
+    }
+
+    private static ChunkGenerator getSourceGenerator(MinecraftServer server,
+                                                      ResourceLocation baseDimension) {
         // 1. Try to get the source dimension's ServerLevel
         ResourceKey<Level> sourceKey = ResourceKey.create(Registries.DIMENSION, baseDimension);
         ServerLevel sourceLevel = server.getLevel(sourceKey);
@@ -137,6 +148,31 @@ public final class DimensionFactory {
 
         // 3. Last resort: log error and throw
         throw new IllegalStateException("Cannot find source dimension to clone generator: " + baseDimension);
+    }
+
+    /**
+     * Deep-copy a ChunkGenerator via codec round-trip to avoid sharing mutable state
+     * between the source dimension and the exploration dimension.
+     * Falls back to the direct reference if serialization fails.
+     */
+    private static ChunkGenerator deepCopyGenerator(RegistryAccess registryAccess,
+                                                     ChunkGenerator sourceGen) {
+        try {
+            DynamicOps<Tag> ops = RegistryOps.create(NbtOps.INSTANCE, registryAccess);
+
+            Tag serialized = ChunkGenerator.CODEC.encodeStart(ops, sourceGen)
+                    .getOrThrow(error -> new IllegalStateException("Failed to serialize ChunkGenerator: " + error));
+
+            ChunkGenerator copy = ChunkGenerator.CODEC.parse(ops, serialized)
+                    .getOrThrow(error -> new IllegalStateException("Failed to deserialize ChunkGenerator: " + error));
+
+            LOGGER.debug("Deep-copied {} via codec round-trip", sourceGen.getClass().getSimpleName());
+            return copy;
+        } catch (Exception e) {
+            LOGGER.warn("Codec round-trip failed for {}, falling back to shared reference: {}",
+                    sourceGen.getClass().getSimpleName(), e.getMessage());
+            return sourceGen;
+        }
     }
 
     // ── Resolve DimensionType from source dimension ──
