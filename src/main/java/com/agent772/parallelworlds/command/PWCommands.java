@@ -9,7 +9,7 @@ import com.agent772.parallelworlds.dimension.RecoveryDimensionManager;
 import com.agent772.parallelworlds.dimension.SeedManager;
 import com.agent772.parallelworlds.teleport.TeleportHandler;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.logging.LogUtils;
@@ -59,7 +59,7 @@ public final class PWCommands {
                 .then(Commands.literal("list").executes(PWCommands::listDimensions))
                 .then(Commands.literal("info").executes(PWCommands::info))
                 .then(Commands.literal("tp")
-                        .then(Commands.argument("dimension", StringArgumentType.string())
+                        .then(Commands.argument("dimension", ResourceLocationArgument.id())
                                 .suggests(DIMENSION_SUGGESTIONS)
                                 .executes(PWCommands::teleport)))
                 .then(Commands.literal("return").executes(PWCommands::returnFromExploration))
@@ -195,12 +195,8 @@ public final class PWCommands {
             return 0;
         }
 
-        String dimStr = StringArgumentType.getString(ctx, "dimension");
-        ResourceLocation dimLoc = ResourceLocation.tryParse(dimStr);
-        if (dimLoc == null) {
-            source.sendFailure(Component.translatable("parallelworlds.command.tp.invalid_dim", dimStr));
-            return 0;
-        }
+        ResourceLocation dimLoc = ResourceLocationArgument.getId(ctx, "dimension");
+        String dimStr = dimLoc.toString();
 
         DimensionRegistrar registrar = DimensionRegistrar.getInstance();
 
