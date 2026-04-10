@@ -20,6 +20,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
@@ -112,51 +113,51 @@ public final class PWAdminCommands {
                 // Management
                 .then(Commands.literal("returnall").executes(PWAdminCommands::returnAll))
                 .then(Commands.literal("info")
-                        .then(Commands.argument("dimension", StringArgumentType.string())
+                        .then(Commands.argument("dimension", ResourceLocationArgument.id())
                                 .suggests(DIMENSION_SUGGESTIONS)
                                 .executes(PWAdminCommands::dimInfo)))
                 .then(Commands.literal("stats").executes(PWAdminCommands::stats))
                 .then(Commands.literal("seed")
-                        .then(Commands.argument("dimension", StringArgumentType.string())
+                        .then(Commands.argument("dimension", ResourceLocationArgument.id())
                                 .suggests(DIMENSION_SUGGESTIONS)
                                 .executes(PWAdminCommands::seed)))
                 .then(Commands.literal("reload").executes(PWAdminCommands::reload))
                 // Pre-generation
                 .then(Commands.literal("pregen")
                         .then(Commands.literal("start")
-                                .then(Commands.argument("dimension", StringArgumentType.string())
+                                .then(Commands.argument("dimension", ResourceLocationArgument.id())
                                         .suggests(DIMENSION_SUGGESTIONS)
                                         .executes(ctx -> pregenStart(ctx, 16))
                                         .then(Commands.argument("radius", IntegerArgumentType.integer(1, 512))
                                                 .executes(ctx -> pregenStart(ctx,
                                                         IntegerArgumentType.getInteger(ctx, "radius"))))))
                         .then(Commands.literal("stop")
-                                .then(Commands.argument("dimension", StringArgumentType.string())
+                                .then(Commands.argument("dimension", ResourceLocationArgument.id())
                                         .suggests(DIMENSION_SUGGESTIONS)
                                         .executes(PWAdminCommands::pregenStop)))
                         .then(Commands.literal("pause")
-                                .then(Commands.argument("dimension", StringArgumentType.string())
+                                .then(Commands.argument("dimension", ResourceLocationArgument.id())
                                         .suggests(DIMENSION_SUGGESTIONS)
                                         .executes(PWAdminCommands::pregenPause)))
                         .then(Commands.literal("resume")
-                                .then(Commands.argument("dimension", StringArgumentType.string())
+                                .then(Commands.argument("dimension", ResourceLocationArgument.id())
                                         .suggests(DIMENSION_SUGGESTIONS)
                                         .executes(PWAdminCommands::pregenResume)))
                         .then(Commands.literal("status")
                                 .executes(PWAdminCommands::pregenStatusAll)
-                                .then(Commands.argument("dimension", StringArgumentType.string())
+                                .then(Commands.argument("dimension", ResourceLocationArgument.id())
                                         .suggests(DIMENSION_SUGGESTIONS)
                                         .executes(PWAdminCommands::pregenStatus)))
                         .then(Commands.literal("stopall").executes(PWAdminCommands::pregenStopAll)))
                 // Progression
                 .then(Commands.literal("unlock")
                         .then(Commands.argument("player", EntityArgument.player())
-                                .then(Commands.argument("dimension", StringArgumentType.string())
+                                .then(Commands.argument("dimension", ResourceLocationArgument.id())
                                         .suggests(DIMENSION_SUGGESTIONS)
                                         .executes(PWAdminCommands::unlock))))
                 .then(Commands.literal("lock")
                         .then(Commands.argument("player", EntityArgument.player())
-                                .then(Commands.argument("dimension", StringArgumentType.string())
+                                .then(Commands.argument("dimension", ResourceLocationArgument.id())
                                         .suggests(DIMENSION_SUGGESTIONS)
                                         .executes(PWAdminCommands::lock))))
                 .then(Commands.literal("unlocks")
@@ -201,12 +202,8 @@ public final class PWAdminCommands {
 
     private static int dimInfo(CommandContext<CommandSourceStack> ctx) {
         CommandSourceStack source = ctx.getSource();
-        String dimStr = StringArgumentType.getString(ctx, "dimension");
-        ResourceLocation dimLoc = ResourceLocation.tryParse(dimStr);
-        if (dimLoc == null) {
-            source.sendFailure(Component.translatable("parallelworlds.admin.invalid_dim", dimStr));
-            return 0;
-        }
+        ResourceLocation dimLoc = ResourceLocationArgument.getId(ctx, "dimension");
+        String dimStr = dimLoc.toString();
 
         PWSavedData savedData = PWSavedData.get(source.getServer());
         var metaOpt = savedData.getDimensionMetadata(dimLoc);
@@ -286,12 +283,8 @@ public final class PWAdminCommands {
 
     private static int seed(CommandContext<CommandSourceStack> ctx) {
         CommandSourceStack source = ctx.getSource();
-        String dimStr = StringArgumentType.getString(ctx, "dimension");
-        ResourceLocation dimLoc = ResourceLocation.tryParse(dimStr);
-        if (dimLoc == null) {
-            source.sendFailure(Component.translatable("parallelworlds.admin.invalid_dim", dimStr));
-            return 0;
-        }
+        ResourceLocation dimLoc = ResourceLocationArgument.getId(ctx, "dimension");
+        String dimStr = dimLoc.toString();
 
         DimensionRegistrar registrar = DimensionRegistrar.getInstance();
         ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, dimLoc);
@@ -328,12 +321,9 @@ public final class PWAdminCommands {
             return 0;
         }
 
-        String dimStr = StringArgumentType.getString(ctx, "dimension");
-        ResourceKey<Level> key = parseDimensionKey(dimStr);
-        if (key == null) {
-            source.sendFailure(Component.translatable("parallelworlds.admin.invalid_dim", dimStr));
-            return 0;
-        }
+        ResourceLocation dimLoc = ResourceLocationArgument.getId(ctx, "dimension");
+        String dimStr = dimLoc.toString();
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, dimLoc);
 
         String result = pregen.startGeneration(source.getServer(), key, radius);
         source.sendSuccess(() -> Component.literal(result).withStyle(ChatFormatting.GREEN), true);
@@ -348,12 +338,8 @@ public final class PWAdminCommands {
             return 0;
         }
 
-        String dimStr = StringArgumentType.getString(ctx, "dimension");
-        ResourceKey<Level> key = parseDimensionKey(dimStr);
-        if (key == null) {
-            source.sendFailure(Component.translatable("parallelworlds.admin.invalid_dim", dimStr));
-            return 0;
-        }
+        ResourceLocation dimLoc = ResourceLocationArgument.getId(ctx, "dimension");
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, dimLoc);
 
         String result = pregen.stopGeneration(key, source.getServer());
         source.sendSuccess(() -> Component.literal(result).withStyle(ChatFormatting.YELLOW), true);
@@ -368,12 +354,8 @@ public final class PWAdminCommands {
             return 0;
         }
 
-        String dimStr = StringArgumentType.getString(ctx, "dimension");
-        ResourceKey<Level> key = parseDimensionKey(dimStr);
-        if (key == null) {
-            source.sendFailure(Component.translatable("parallelworlds.admin.invalid_dim", dimStr));
-            return 0;
-        }
+        ResourceLocation dimLoc = ResourceLocationArgument.getId(ctx, "dimension");
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, dimLoc);
 
         String result = pregen.pauseGeneration(key);
         source.sendSuccess(() -> Component.literal(result).withStyle(ChatFormatting.YELLOW), true);
@@ -388,12 +370,8 @@ public final class PWAdminCommands {
             return 0;
         }
 
-        String dimStr = StringArgumentType.getString(ctx, "dimension");
-        ResourceKey<Level> key = parseDimensionKey(dimStr);
-        if (key == null) {
-            source.sendFailure(Component.translatable("parallelworlds.admin.invalid_dim", dimStr));
-            return 0;
-        }
+        ResourceLocation dimLoc = ResourceLocationArgument.getId(ctx, "dimension");
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, dimLoc);
 
         String result = pregen.resumeGeneration(key);
         source.sendSuccess(() -> Component.literal(result).withStyle(ChatFormatting.GREEN), true);
@@ -408,12 +386,8 @@ public final class PWAdminCommands {
             return 0;
         }
 
-        String dimStr = StringArgumentType.getString(ctx, "dimension");
-        ResourceKey<Level> key = parseDimensionKey(dimStr);
-        if (key == null) {
-            source.sendFailure(Component.translatable("parallelworlds.admin.invalid_dim", dimStr));
-            return 0;
-        }
+        ResourceLocation dimLoc = ResourceLocationArgument.getId(ctx, "dimension");
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, dimLoc);
 
         String result = pregen.getStatus(key);
         source.sendSuccess(() -> Component.literal(result).withStyle(ChatFormatting.AQUA), false);
@@ -465,12 +439,8 @@ public final class PWAdminCommands {
     private static int unlock(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         CommandSourceStack source = ctx.getSource();
         ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-        String dimStr = StringArgumentType.getString(ctx, "dimension");
-        ResourceLocation dimLoc = ResourceLocation.tryParse(dimStr);
-        if (dimLoc == null) {
-            source.sendFailure(Component.translatable("parallelworlds.admin.invalid_dim", dimStr));
-            return 0;
-        }
+        ResourceLocation dimLoc = ResourceLocationArgument.getId(ctx, "dimension");
+        String dimStr = dimLoc.toString();
 
         PWSavedData savedData = PWSavedData.get(source.getServer());
         savedData.grantManualUnlock(target.getUUID(), dimLoc);
@@ -485,12 +455,8 @@ public final class PWAdminCommands {
     private static int lock(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         CommandSourceStack source = ctx.getSource();
         ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-        String dimStr = StringArgumentType.getString(ctx, "dimension");
-        ResourceLocation dimLoc = ResourceLocation.tryParse(dimStr);
-        if (dimLoc == null) {
-            source.sendFailure(Component.translatable("parallelworlds.admin.invalid_dim", dimStr));
-            return 0;
-        }
+        ResourceLocation dimLoc = ResourceLocationArgument.getId(ctx, "dimension");
+        String dimStr = dimLoc.toString();
 
         PWSavedData savedData = PWSavedData.get(source.getServer());
         savedData.revokeManualUnlock(target.getUUID(), dimLoc);
@@ -731,12 +697,6 @@ public final class PWAdminCommands {
     // ═══════════════════════════════════════════════════════════════
     //  Helpers
     // ═══════════════════════════════════════════════════════════════
-
-    private static ResourceKey<Level> parseDimensionKey(String dimStr) {
-        ResourceLocation loc = ResourceLocation.tryParse(dimStr);
-        if (loc == null) return null;
-        return ResourceKey.create(Registries.DIMENSION, loc);
-    }
 
     private static DimensionManager getDimensionManager() {
         return dimensionManagerSupplier != null ? dimensionManagerSupplier.get() : null;
