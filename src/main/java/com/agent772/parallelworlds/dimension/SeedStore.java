@@ -64,6 +64,7 @@ import java.util.Optional;
 public final class SeedStore {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final String SEED_FILE = "pw_seeds.dat";
+    private static final String FORCE_ROTATE_FILE = "pw_force_rotate";
 
     /** Per-seed data: the seed value and when it was generated. */
     private record SeedEntry(long seed, long createdAt) {}
@@ -87,6 +88,11 @@ public final class SeedStore {
         seeds.clear();
         loadFromDisk();
 
+        boolean forceAll = isForceRotationScheduled();
+        if (forceAll) {
+            LOGGER.info("[SeedStore] Force-rotation flag detected — all exploration dimensions will be rotated");
+        }
+
         long now = SeedManager.currentEpochSecond();
         List<String> enabled = PWConfig.getEnabledDimensions();
         for (String dimStr : enabled) {
@@ -99,11 +105,12 @@ public final class SeedStore {
                 seeds.put(dim, new SeedEntry(seed, now));
                 LOGGER.info("[SeedStore] {} — first run, generated seed {}, createdAt={}, nextReset={}",
                         dim, seed, SeedManager.formatEpoch(now), SeedManager.nextResetFormatted(now));
-            } else if (SeedManager.isRotationDue(existing.createdAt())) {
+            } else if (forceAll || SeedManager.isRotationDue(existing.createdAt())) {
                 long seed = SeedManager.generateSeed();
                 seeds.put(dim, new SeedEntry(seed, now));
-                LOGGER.info("[SeedStore] {} — ROTATING: old createdAt={}, nextReset={} (past), new seed={}, new createdAt={}",
-                        dim, SeedManager.formatEpoch(existing.createdAt()),
+                LOGGER.info("[SeedStore] {} — ROTATING{}: old createdAt={}, nextReset={}, new seed={}, new createdAt={}",
+                        dim, forceAll ? " (forced)" : "",
+                        SeedManager.formatEpoch(existing.createdAt()),
                         SeedManager.nextResetFormatted(existing.createdAt()),
                         seed, SeedManager.formatEpoch(now));
             } else {
@@ -111,6 +118,10 @@ public final class SeedStore {
                         dim, existing.seed(), SeedManager.formatEpoch(existing.createdAt()),
                         SeedManager.nextResetFormatted(existing.createdAt()));
             }
+        }
+
+        if (forceAll) {
+            clearForceRotationFlag();
         }
 
         saveToDisk();
@@ -206,6 +217,48 @@ public final class SeedStore {
             LOGGER.debug("Seed store saved ({} seeds)", seeds.size());
         } catch (IOException e) {
             LOGGER.error("Failed to save seed store", e);
+        }
+    }
+
+    // ── Force rotation scheduling ──────────────────────────────────────────
+
+    /**
+     * Create a marker file that tells {@link #initializeAndRotate} to force-rotate
+     * all seeds on the next server start.  The path is resolved from the server
+     * instance so this works even before {@code seedPath} is set.
+     *
+     * @return {@code true} if the flag was newly created, {@code false} if it already existed
+     */
+    public static boolean scheduleForceRotation(MinecraftServer server) {
+        Path marker = server.getWorldPath(LevelResource.ROOT)
+                .resolve("data")
+                .resolve(FORCE_ROTATE_FILE);
+        if (Files.exists(marker)) {
+            return false;
+        }
+        try {
+            Files.createDirectories(marker.getParent());
+            Files.createFile(marker);
+            LOGGER.info("[SeedStore] Force-rotation flag set — all seeds will rotate on next startup");
+            return true;
+        } catch (IOException e) {
+            LOGGER.error("[SeedStore] Failed to create force-rotation marker", e);
+            return false;
+        }
+    }
+
+    private static boolean isForceRotationScheduled() {
+        if (seedPath == null) return false;
+        return Files.exists(seedPath.resolveSibling(FORCE_ROTATE_FILE));
+    }
+
+    private static void clearForceRotationFlag() {
+        if (seedPath == null) return;
+        try {
+            Files.deleteIfExists(seedPath.resolveSibling(FORCE_ROTATE_FILE));
+            LOGGER.info("[SeedStore] Force-rotation flag cleared");
+        } catch (IOException e) {
+            LOGGER.error("[SeedStore] Failed to delete force-rotation marker", e);
         }
     }
 
