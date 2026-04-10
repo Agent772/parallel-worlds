@@ -11,6 +11,7 @@ public final class PWConfig {
     // General
     private static List<String> enabledDimensions;
     private static int explorationBorderDiameter;
+    private static String noiseGeneratorPreset;
 
     // Seed
     private static boolean seedRotationEnabled;
@@ -104,6 +105,7 @@ public final class PWConfig {
     public static void refresh() {
         enabledDimensions = (List<String>) PWConfigSpec.ENABLED_DIMENSIONS.get();
         explorationBorderDiameter = PWConfigSpec.EXPLORATION_BORDER_DIAMETER.get();
+        noiseGeneratorPreset = PWConfigSpec.NOISE_GENERATOR_PRESET.get();
 
         seedRotationEnabled = PWConfigSpec.SEED_ROTATION_ENABLED.get();
         resetSchedule = PWConfigSpec.RESET_SCHEDULE.get();
@@ -184,6 +186,7 @@ public final class PWConfig {
 
     public static List<String> getEnabledDimensions() { return enabledDimensions; }
     public static int getExplorationBorderDiameter() { return explorationBorderDiameter; }
+    public static String getNoiseGeneratorPreset() { return noiseGeneratorPreset; }
 
     public static boolean isSeedRotationEnabled() { return seedRotationEnabled; }
     public static PWConfigSpec.ResetSchedule getResetSchedule() { return resetSchedule; }

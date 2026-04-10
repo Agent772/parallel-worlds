@@ -15,6 +15,7 @@ public final class PWConfigSpec {
     // General
     public static final ModConfigSpec.ConfigValue<List<? extends String>> ENABLED_DIMENSIONS;
     public static final ModConfigSpec.IntValue EXPLORATION_BORDER_DIAMETER;
+    public static final ModConfigSpec.ConfigValue<String> NOISE_GENERATOR_PRESET;
 
     // Seed
     public static final ModConfigSpec.BooleanValue SEED_ROTATION_ENABLED;
@@ -118,6 +119,14 @@ public final class PWConfigSpec {
                          "Example: 2000 gives a 2000x2000 exploration area (1000 blocks from centre on each side).",
                          "When set to a positive value the border is fixed at 0,0 and is NOT linked to the overworld border.")
                 .defineInRange("explorationBorderDiameter", -1, -1, 60_000_000);
+        NOISE_GENERATOR_PRESET = builder
+                .comment("",
+                         "Noise generator preset for exploration dimensions.",
+                         "Controls terrain shape — biome scale, height variation, etc.",
+                         "Only affects overworld-type exploration dimensions (nether/end use their own generators).",
+                         "Options: minecraft:overworld (default), minecraft:large_biomes, minecraft:amplified",
+                         "Set to empty string to inherit the preset from the source dimension unchanged.")
+                .define("noiseGeneratorPreset", "");
         builder.pop();
 
         // ── Seed ──
