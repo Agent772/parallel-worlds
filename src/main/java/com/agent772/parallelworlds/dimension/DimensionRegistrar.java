@@ -1,5 +1,6 @@
 package com.agent772.parallelworlds.dimension;
 
+import com.agent772.parallelworlds.accessor.IWorldDataAccessor;
 import com.agent772.parallelworlds.config.PWConfig;
 import com.agent772.parallelworlds.config.PWConfigSpec;
 import com.agent772.parallelworlds.data.DimensionMetadata;
@@ -17,6 +18,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.WorldOptions;
 import org.slf4j.Logger;
 
 import java.util.*;
@@ -59,6 +61,13 @@ public final class DimensionRegistrar {
         // Snapshot "now" once so all dims get the same registeredAt timestamp this startup.
         long now = SeedManager.currentEpochSecond();
 
+        // Snapshot and guard the overworld's WorldOptions for the entire batch of
+        // dimension creations to prevent exploration seeds from leaking into
+        // PrimaryLevelData (fixes #3).
+        WorldOptions originalOptions = server.getWorldData().worldGenOptions();
+        ExplorationSeedManager.enableWorldOptionsGuard(originalOptions);
+
+        try {
         for (String baseDimStr : enabled) {
             try {
                 ResourceLocation baseDim = ResourceLocation.parse(baseDimStr);
@@ -179,6 +188,20 @@ public final class DimensionRegistrar {
                 }
             } catch (Exception e) {
                 LOGGER.error("Error creating exploration dimension for: {}", baseDimStr, e);
+            }
+        }
+        } finally {
+            ExplorationSeedManager.disableWorldOptionsGuard();
+
+            // Final verification: restore the original WorldOptions if contaminated
+            WorldOptions currentOptions = server.getWorldData().worldGenOptions();
+            if (currentOptions.seed() != originalOptions.seed()) {
+                LOGGER.warn("WorldOptions was contaminated after dimension creation batch — " +
+                        "current seed={}, expected seed={} — restoring",
+                        currentOptions.seed(), originalOptions.seed());
+                if (server.getWorldData() instanceof IWorldDataAccessor accessor) {
+                    accessor.pw$setWorldOptions(originalOptions);
+                }
             }
         }
         LOGGER.info("Finished creating {} exploration dimensions", runtimeDimensions.size());
