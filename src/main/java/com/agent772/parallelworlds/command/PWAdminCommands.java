@@ -7,6 +7,7 @@ import com.agent772.parallelworlds.dimension.DimensionManager;
 import com.agent772.parallelworlds.dimension.DimensionRegistrar;
 import com.agent772.parallelworlds.dimension.DimensionUtils;
 import com.agent772.parallelworlds.dimension.RecoveryDimensionManager;
+import com.agent772.parallelworlds.dimension.SeedStore;
 import com.agent772.parallelworlds.dimension.RecoveryScanner;
 import com.agent772.parallelworlds.generation.ChunkPreGenerator;
 import com.mojang.brigadier.CommandDispatcher;
@@ -122,6 +123,7 @@ public final class PWAdminCommands {
                                 .suggests(DIMENSION_SUGGESTIONS)
                                 .executes(PWAdminCommands::seed)))
                 .then(Commands.literal("reload").executes(PWAdminCommands::reload))
+                .then(Commands.literal("forcerotate").executes(PWAdminCommands::forceRotate))
                 // Pre-generation
                 .then(Commands.literal("pregen")
                         .then(Commands.literal("start")
@@ -306,6 +308,20 @@ public final class PWAdminCommands {
         source.sendSuccess(() -> Component.translatable("parallelworlds.admin.config_reloaded")
                 .withStyle(ChatFormatting.GREEN), true);
         LOGGER.info("Config reloaded by {}", source.getTextName());
+        return 1;
+    }
+
+    private static int forceRotate(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        boolean created = SeedStore.scheduleForceRotation(source.getServer());
+        if (created) {
+            source.sendSuccess(() -> Component.translatable("parallelworlds.admin.forcerotate.scheduled")
+                    .withStyle(ChatFormatting.GREEN), true);
+            LOGGER.info("Force seed rotation scheduled by {}", source.getTextName());
+        } else {
+            source.sendSuccess(() -> Component.translatable("parallelworlds.admin.forcerotate.already_scheduled")
+                    .withStyle(ChatFormatting.YELLOW), false);
+        }
         return 1;
     }
 

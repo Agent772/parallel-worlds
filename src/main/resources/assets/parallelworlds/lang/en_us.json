@@ -88,6 +88,8 @@
   "parallelworlds.admin.stats.pregen_active": "Pre-gen active: %s",
   "parallelworlds.admin.seed.not_found": "No seed found for: %s",
   "parallelworlds.admin.seed.result": "Seed for %1$s: %2$s",
+  "parallelworlds.admin.forcerotate.scheduled": "Seed rotation scheduled for all exploration dimensions on next restart.",
+  "parallelworlds.admin.forcerotate.already_scheduled": "Force rotation is already scheduled for next restart.",
 
   "parallelworlds.recall.received": "You received a Death Recall Token — right-click to return to where you died!",
   "parallelworlds.recall.used": "Recalling to your death location...",
