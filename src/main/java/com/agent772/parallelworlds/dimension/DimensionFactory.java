@@ -2,6 +2,7 @@ package com.agent772.parallelworlds.dimension;
 
 import com.agent772.parallelworlds.ParallelWorlds;
 import com.agent772.parallelworlds.accessor.IServerDimensionAccessor;
+import com.agent772.parallelworlds.config.PWConfig;
 import com.mojang.logging.LogUtils;
 import com.mojang.serialization.DynamicOps;
 import net.minecraft.core.Holder;
@@ -19,7 +20,11 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import org.slf4j.Logger;
+
+import java.util.Optional;
 
 /**
  * Creates exploration dimensions at server startup using runtime registry manipulation.
@@ -122,7 +127,43 @@ public final class DimensionFactory {
     private static ChunkGenerator cloneChunkGenerator(MinecraftServer server,
                                                        ResourceLocation baseDimension) {
         ChunkGenerator sourceGen = getSourceGenerator(server, baseDimension);
-        return deepCopyGenerator(server.registryAccess(), sourceGen);
+        ChunkGenerator copy = deepCopyGenerator(server.registryAccess(), sourceGen);
+        return applyNoisePreset(copy, server.registryAccess());
+    }
+
+    /**
+     * If the config specifies a noise generator preset, swap the NoiseGeneratorSettings
+     * on the cloned generator. Non-noise generators (flat, end, etc.) are returned unchanged.
+     */
+    private static ChunkGenerator applyNoisePreset(ChunkGenerator generator,
+                                                    RegistryAccess registryAccess) {
+        String preset = PWConfig.getNoiseGeneratorPreset();
+        if (preset == null || preset.isEmpty()) return generator;
+        if (!(generator instanceof NoiseBasedChunkGenerator noiseGen)) {
+            LOGGER.debug("Skipping noise preset — generator is not noise-based: {}",
+                    generator.getClass().getSimpleName());
+            return generator;
+        }
+
+        ResourceLocation presetLoc = ResourceLocation.tryParse(preset);
+        if (presetLoc == null) {
+            LOGGER.warn("Invalid noise generator preset '{}', ignoring", preset);
+            return generator;
+        }
+
+        Registry<NoiseGeneratorSettings> registry =
+                registryAccess.registryOrThrow(Registries.NOISE_SETTINGS);
+        ResourceKey<NoiseGeneratorSettings> key =
+                ResourceKey.create(Registries.NOISE_SETTINGS, presetLoc);
+
+        Optional<Holder.Reference<NoiseGeneratorSettings>> holder = registry.getHolder(key);
+        if (holder.isEmpty()) {
+            LOGGER.warn("Noise generator preset '{}' not found in registry, ignoring", preset);
+            return generator;
+        }
+
+        LOGGER.info("Applying noise generator preset '{}' to exploration dimension", preset);
+        return new NoiseBasedChunkGenerator(noiseGen.getBiomeSource(), holder.get());
     }
 
     private static ChunkGenerator getSourceGenerator(MinecraftServer server,
