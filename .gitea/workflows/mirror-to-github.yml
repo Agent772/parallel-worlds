@@ -1,0 +1,20 @@
+name: Mirror to GitHub
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to GitHub
+        run: |
+          git remote add github https://Agent772:${{ secrets.GITHUB }}@github.com/Agent772/parallel-worlds.git
+          git push github HEAD:${{ github.ref_name }}

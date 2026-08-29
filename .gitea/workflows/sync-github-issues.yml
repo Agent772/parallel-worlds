@@ -1,0 +1,112 @@
+name: Sync GitHub Issues
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync issues from GitHub
+        env:
+          GH_REPO: "Agent772/parallel-worlds"
+          GITEA_REPO: "Agent772/parallel-worlds"
+          GITEA_TOKEN: ${{ github.token }}
+        run: |
+          GITEA_API="https://gitea.matejhoz.com/api/v1"
+
+          echo "Fetching open issues from GitHub: ${GH_REPO}"
+          gh_issues=$(curl -sf "https://api.github.com/repos/${GH_REPO}/issues?state=open&per_page=100" \
+            -H "Accept: application/vnd.github+json" || echo "[]")
+
+          echo "$gh_issues" | jq -c '.[] | select(.pull_request == null)' | while read -r issue; do
+            number=$(echo "$issue" | jq -r '.number')
+            title=$(echo "$issue" | jq -r '.title')
+            body=$(echo "$issue" | jq -r '.body // ""')
+            gh_url=$(echo "$issue" | jq -r '.html_url')
+            gh_user=$(echo "$issue" | jq -r '.user.login')
+            gh_date=$(echo "$issue" | jq -r '.created_at')
+            labels=$(echo "$issue" | jq -r '[.labels[].name] | join(", ")')
+            marker="<!-- gh-issue:${number} -->"
+
+            existing=$(curl -sf "${GITEA_API}/repos/${GITEA_REPO}/issues?type=issues&state=open&limit=50" \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              | jq -r --arg m "$marker" '.[] | select(.body | contains($m)) | .number')
+
+            if [ -z "$existing" ]; then
+              existing=$(curl -sf "${GITEA_API}/repos/${GITEA_REPO}/issues?type=issues&state=closed&limit=50" \
+                -H "Authorization: token ${GITEA_TOKEN}" \
+                | jq -r --arg m "$marker" '.[] | select(.body | contains($m)) | .number')
+            fi
+
+            if [ -z "$existing" ]; then
+              echo "Importing GitHub issue #${number}: ${title}"
+
+              label_line=""
+              if [ -n "$labels" ]; then
+                label_line="**Labels:** ${labels}"
+              fi
+
+              printf '%s\n> Imported from [GitHub issue #%s](%s) by **@%s** on %s\n%s\n\n%s' \
+                "$marker" "$number" "$gh_url" "$gh_user" "$gh_date" "$label_line" "$body" > /tmp/issue_body.txt
+
+              jq -n --arg title "$title" --rawfile body /tmp/issue_body.txt \
+                '{title: $title, body: $body}' > /tmp/issue_payload.json
+
+              existing=$(curl -sf -X POST "${GITEA_API}/repos/${GITEA_REPO}/issues" \
+                -H "Authorization: token ${GITEA_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d @/tmp/issue_payload.json \
+                | jq -r '.number')
+
+              if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+                echo "  -> Created as Gitea #${existing}"
+              else
+                echo "  -> Failed to create"
+                continue
+              fi
+            else
+              echo "Issue #${number} already exists as Gitea #${existing}"
+            fi
+
+            echo "  Syncing comments for GitHub #${number} -> Gitea #${existing}"
+
+            gitea_comments=$(curl -sf "${GITEA_API}/repos/${GITEA_REPO}/issues/${existing}/comments" \
+              -H "Authorization: token ${GITEA_TOKEN}" || echo "[]")
+
+            gh_comments=$(curl -sf "https://api.github.com/repos/${GH_REPO}/issues/${number}/comments?per_page=100" \
+              -H "Accept: application/vnd.github+json" || echo "[]")
+
+            echo "$gh_comments" | jq -c '.[]' | while read -r comment; do
+              comment_id=$(echo "$comment" | jq -r '.id')
+              comment_user=$(echo "$comment" | jq -r '.user.login')
+              comment_date=$(echo "$comment" | jq -r '.created_at')
+              comment_body=$(echo "$comment" | jq -r '.body // ""')
+              comment_url=$(echo "$comment" | jq -r '.html_url')
+              comment_marker="<!-- gh-comment:${comment_id} -->"
+
+              already_synced=$(echo "$gitea_comments" | jq -r --arg m "$comment_marker" \
+                '.[] | select(.body | contains($m)) | .id')
+
+              if [ -n "$already_synced" ]; then
+                continue
+              fi
+
+              echo "  Importing comment by @${comment_user} (${comment_date})"
+
+              printf '%s\n> [Comment](%s) by **@%s** on %s\n\n%s' \
+                "$comment_marker" "$comment_url" "$comment_user" "$comment_date" "$comment_body" > /tmp/comment_body.txt
+
+              jq -n --rawfile body /tmp/comment_body.txt '{body: $body}' > /tmp/comment_payload.json
+
+              curl -sf -X POST "${GITEA_API}/repos/${GITEA_REPO}/issues/${existing}/comments" \
+                -H "Authorization: token ${GITEA_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d @/tmp/comment_payload.json > /dev/null \
+                && echo "    -> Synced" \
+                || echo "    -> Failed"
+            done
+          done
+          echo "Sync complete"
