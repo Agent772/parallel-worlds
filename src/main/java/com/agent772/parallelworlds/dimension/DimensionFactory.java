@@ -192,12 +192,41 @@ public final class DimensionFactory {
     }
 
     /**
+     * Create an independent ChunkGenerator for the exploration dimension.
+     *
+     * <p>For noise-based generators the live {@link net.minecraft.world.level.biome.BiomeSource}
+     * is reused directly. A codec round-trip serializes a {@code MultiNoiseBiomeSource} as just
+     * its preset key, so NeoForge biome modifiers are not re-applied on deserialization and any
+     * modded biome additions are lost. The BiomeSource is immutable after startup and does not
+     * depend on the seed (the seed only drives {@link net.minecraft.world.level.levelgen.RandomState}
+     * noise sampling, handled by MixinRandomState), so sharing it between dimensions is safe.
+     *
+     * <p>Only a plain {@code NoiseBasedChunkGenerator} takes this path. Custom subclasses
+     * are excluded (exact-class check) because reconstructing them as a base
+     * {@code NoiseBasedChunkGenerator} would silently discard their type and any extra
+     * fields or behavior; they fall back to the codec round-trip, which preserves the
+     * subclass via its registered codec.
+     *
+     * <p>Non-noise generators (flat, end, etc.) also fall back to a codec round-trip.
+     */
+    private static ChunkGenerator deepCopyGenerator(RegistryAccess registryAccess,
+                                                     ChunkGenerator sourceGen) {
+        if (sourceGen.getClass() == NoiseBasedChunkGenerator.class) {
+            NoiseBasedChunkGenerator noiseGen = (NoiseBasedChunkGenerator) sourceGen;
+            LOGGER.debug("Reusing live BiomeSource for {} to preserve modded biomes",
+                    noiseGen.getClass().getSimpleName());
+            return new NoiseBasedChunkGenerator(noiseGen.getBiomeSource(), noiseGen.generatorSettings());
+        }
+        return codecCopyGenerator(registryAccess, sourceGen);
+    }
+
+    /**
      * Deep-copy a ChunkGenerator via codec round-trip to avoid sharing mutable state
      * between the source dimension and the exploration dimension.
      * Falls back to the direct reference if serialization fails.
      */
-    private static ChunkGenerator deepCopyGenerator(RegistryAccess registryAccess,
-                                                     ChunkGenerator sourceGen) {
+    private static ChunkGenerator codecCopyGenerator(RegistryAccess registryAccess,
+                                                      ChunkGenerator sourceGen) {
         try {
             DynamicOps<Tag> ops = RegistryOps.create(NbtOps.INSTANCE, registryAccess);
 
