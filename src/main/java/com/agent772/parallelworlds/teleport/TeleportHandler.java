@@ -618,7 +618,16 @@ public final class TeleportHandler {
             return pos;
         }
 
-        BlockPos safe = findSafePosition(level, pos);
+        DimensionEnvironment env = DimensionEnvironment.classify(level.dimensionType());
+        BlockPos safe;
+        if (env == DimensionEnvironment.NETHER_LIKE) {
+            safe = findNetherSafePosition(level, pos);
+        } else if (env == DimensionEnvironment.END_LIKE) {
+            safe = findEndSafePosition(level);
+        } else {
+            safe = findSafePosition(level, pos);
+        }
+
         if (safe != null) {
             return safe;
         }
@@ -739,17 +748,34 @@ public final class TeleportHandler {
 
         BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos();
 
-        // Priority 1: actual terrain surface via heightmap.
+        // Priority 1: window around the original death Y so cave/underground deaths land
+        // near where the player actually died instead of snapping to the surface above.
+        int nearMin = Math.max(centerY - 16, level.getMinBuildHeight() + 1);
+        int nearMax = Math.min(centerY + 16, level.getMaxBuildHeight() - 2);
+        for (int dy = 0; dy <= 16; dy++) {
+            int up = centerY + dy;
+            if (up <= nearMax) {
+                mpos.set(x, up, z);
+                if (isSafePosition(level, mpos)) return mpos.immutable();
+            }
+            if (dy > 0) {
+                int down = centerY - dy;
+                if (down >= nearMin) {
+                    mpos.set(x, down, z);
+                    if (isSafePosition(level, mpos)) return mpos.immutable();
+                }
+            }
+        }
+
+        // Priority 2: actual terrain surface via heightmap.
         // MOTION_BLOCKING_NO_LEAVES returns the Y of the first non-blocking block above
         // the surface (i.e. where player feet stand), skipping leaf canopy.
-        // Checking this first prevents landing inside caves that satisfy the 2-block
-        // clearance check but sit below the real surface inside a hill.
         int surfaceY = level.getHeightmapPos(
                 Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, 0, z)).getY();
         mpos.set(x, surfaceY, z);
         if (isSafePosition(level, mpos)) return mpos.immutable();
 
-        // Priority 2: small window near the surface (handles water tops, overhangs, etc.)
+        // Priority 3: small window near the surface (handles water tops, overhangs, etc.)
         int searchMin = Math.max(surfaceY - 4, level.getMinBuildHeight() + 1);
         int searchMax = Math.min(surfaceY + 4, level.getMaxBuildHeight() - 2);
         for (int y = surfaceY + 1; y <= searchMax; y++) {
